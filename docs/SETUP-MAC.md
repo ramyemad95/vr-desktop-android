@@ -62,7 +62,9 @@ The Windows PC runs Sunshine, set up by the VR Desktop Host app from
   of you. Do this again any time it drifts.
 - In the phone's VR Desktop **Settings → VR Settings**:
   - **Virtual screen size:** 70° is the default. Go bigger to read small text, smaller to see the whole screen at once.
-  - **VR viewer:** if straight lines look bent, try another lens type.
+  - **VR viewer:** if straight lines look bent, try another lens type. For the **cardoO VR Go**, pick that entry,
+    center the phone on the line between the eyes, turn the IPD dial until the image is single, then the focus
+    dial until text is sharp.
   - **Head tracking:** on by default. Turn it off to keep the screen fixed in front of your eyes.
   - **Refresh rate:** "Highest available" by default (120 Hz). Pick 60 Hz to save battery and heat. Anything above
     60 Hz needs Motion smoothness set to Adaptive; if it isn't, the app shows a message and runs at 60 Hz.

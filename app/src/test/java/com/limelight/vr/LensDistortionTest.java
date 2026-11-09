@@ -10,7 +10,8 @@ public class LensDistortionTest {
 
     @Test
     public void undistortInvertsDistort() {
-        for (ViewerProfile v : new ViewerProfile[] {ViewerProfile.CARDBOARD_V1, ViewerProfile.CARDBOARD_V2}) {
+        for (ViewerProfile v : new ViewerProfile[] {ViewerProfile.CARDBOARD_V1, ViewerProfile.CARDBOARD_V2,
+                ViewerProfile.CARDOO_VR_GO}) {
             for (float r = 0f; r <= 1.8f; r += 0.05f) {
                 float screen = LensDistortion.distort(r, v.k1, v.k2);
                 assertEquals("r=" + r, r, LensDistortion.undistort(screen, v.k1, v.k2), EPS);
@@ -23,6 +24,26 @@ public class LensDistortionTest {
         ViewerProfile v = ViewerProfile.CARDBOARD_V2;
         assertTrue(LensDistortion.distort(0.5f, v.k1, v.k2) > 0.5f);
         assertTrue(LensDistortion.distort(1.0f, v.k1, v.k2) / 1.0f > LensDistortion.distort(0.5f, v.k1, v.k2) / 0.5f);
+    }
+
+    @Test
+    public void cardooVrGoFitsA70DegreeScreenOnAGalaxyS22Ultra() {
+        ViewerProfile v = ViewerProfile.CARDOO_VR_GO;
+        int w = 3088, h = 1440;
+        float mpp = VrConfig.knownScreenWidthMeters("SM-S908E") / w;
+        int n = 41; // odd, so the middle row is at the lens's height
+        LensDistortion.EyeMesh left = LensDistortion.buildEyeMesh(LensDistortion.LEFT_EYE, w, h, mpp, v, n);
+        int midRow = (n - 1) / 2;
+        float outerTan = left.vertices[(midRow * n) * 4 + 2];
+        float innerTan = left.vertices[(midRow * n + n - 1) * 4 + 2];
+        float halfScreenTan = (float) Math.tan(Math.toRadians(35));
+        // Both side edges of the virtual screen are drawn inside this eye's half of the phone...
+        assertTrue("outer " + outerTan, outerTan < -halfScreenTan);
+        assertTrue("inner " + innerTan, innerTan > halfScreenTan);
+        // ...and its corners are inside the lens's view, before the fade at its rim starts.
+        float cornerTan = (float) Math.hypot(halfScreenTan, halfScreenTan * 9 / 16);
+        float fadeStartTan = (float) (Math.tan(Math.toRadians(v.halfFovDegrees)) * Math.sqrt(0.85));
+        assertTrue("corner " + cornerTan, cornerTan < fadeStartTan);
     }
 
     @Test

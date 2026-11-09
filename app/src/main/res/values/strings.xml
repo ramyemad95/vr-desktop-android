@@ -312,6 +312,7 @@
     <string name="summary_list_vr_viewer">The lens type of the headset the phone sits in</string>
     <string name="vr_viewer_cardboard_v2">Cardboard v2 and most plastic viewers</string>
     <string name="vr_viewer_cardboard_v1">Cardboard v1 (2014)</string>
+    <string name="vr_viewer_cardoo_vr_go">cardoO VR Go (turn its IPD dial until the image is single)</string>
     <string name="vr_viewer_none">No lens correction</string>
     <string name="title_seekbar_vr_screen_size">Virtual screen size</string>
     <string name="summary_seekbar_vr_screen_size">How wide the PC screen looks, in degrees of your view. Bigger makes text easier to read; smaller fits the whole screen in view.</string>

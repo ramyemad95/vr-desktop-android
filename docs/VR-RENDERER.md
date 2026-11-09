@@ -30,7 +30,14 @@ barrel-shaped. Presets:
 |---|---|---|---|---|
 | Cardboard v2 / most plastic viewers (default) | 64 mm | 39 mm | 0.34, 0.55 | 60° |
 | Cardboard v1 | 60 mm | 42 mm | 0.441, 0.156 | 40° |
+| cardoO VR Go | 64 mm | 42 mm | 0.34, 0.55 | 50° |
 | No lens correction | 64 mm | 39 mm | 0, 0 | 60° |
+
+**cardoO VR Go** ([specs](https://cardoo.co/vr-specs)): 40 mm aspherical lenses, 90–100° field of view, an IPD dial
+(60–70 mm) and a focus dial (37.5–46.5 mm screen to lens). The preset uses 64 mm (the user turns the IPD dial until
+the two images merge, which brings the lenses to where the app draws them), the middle of the focus range, and a
+half FOV from the stated field of view. cardoO doesn't publish distortion coefficients; the lens is the same class as
+Cardboard v2's, so it uses those (inside a 70° screen, v1's and v2's coefficients differ by about 1% at the edge).
 
 The lens centers sit symmetrically around the middle of the screen, at mid-height. Placing them correctly needs
 the physical size of a pixel:

@@ -34,6 +34,7 @@ public class VrConfigTest {
         assertSame(ViewerProfile.CARDBOARD_V2, ViewerProfile.fromPreference("cardboard_v2"));
         assertSame(ViewerProfile.CARDBOARD_V1, ViewerProfile.fromPreference("cardboard_v1"));
         assertSame(ViewerProfile.NO_LENS, ViewerProfile.fromPreference("none"));
+        assertSame(ViewerProfile.CARDOO_VR_GO, ViewerProfile.fromPreference("cardoo_vr_go"));
         assertSame(ViewerProfile.CARDBOARD_V2, ViewerProfile.fromPreference(null));
     }
 }
