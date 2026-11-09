@@ -317,4 +317,13 @@
     <string name="summary_seekbar_vr_screen_size">How wide the PC screen looks, in degrees of your view. Bigger makes text easier to read; smaller fits the whole screen in view.</string>
     <string name="suffix_seekbar_vr_screen_size">°</string>
     <string name="vr_no_head_tracking">This phone has no rotation sensor, so the virtual screen can\'t stay in place when you move your head.</string>
+    <string name="title_checkbox_vr_head_tracking">Head tracking</string>
+    <string name="summary_checkbox_vr_head_tracking">Keep the virtual screen in place when you turn your head. Turn off to keep the screen fixed in front of your eyes.</string>
+    <string name="title_list_vr_refresh_rate">Refresh rate</string>
+    <string name="summary_list_vr_refresh_rate">How often the view is redrawn. Higher is smoother when you turn your head; lower saves battery and heat. Above 60 Hz on Samsung phones needs Settings → Display → Motion smoothness → Adaptive.</string>
+    <string name="vr_refresh_rate_highest">Highest available</string>
+    <string name="vr_refresh_rate_120">120 Hz</string>
+    <string name="vr_refresh_rate_96">96 Hz</string>
+    <string name="vr_refresh_rate_60">60 Hz</string>
+    <string name="vr_refresh_rate_capped">%1$d Hz isn\'t available, so the view runs at %2$d Hz. On Samsung phones, set Settings → Display → Motion smoothness to Adaptive.</string>
 </resources>

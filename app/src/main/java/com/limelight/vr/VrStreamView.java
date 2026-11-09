@@ -9,8 +9,12 @@ import android.view.GestureDetector;
 import android.view.MotionEvent;
 import android.view.Surface;
 import android.view.SurfaceHolder;
+import android.widget.Toast;
 
 import com.limelight.LimeLog;
+import com.limelight.R;
+
+import java.util.Arrays;
 
 /**
  * Full-screen stereo view that shows the stream on a virtual screen for a phone VR viewer.
@@ -32,6 +36,8 @@ public class VrStreamView extends GLSurfaceView {
     private final GestureDetector gestures;
     private VrRenderer renderer;
     private Listener listener;
+    private boolean headTracking = true;
+    private int refreshRateHz = RefreshRate.HIGHEST;
 
     // Main thread state
     private boolean glSurfaceAlive;
@@ -60,9 +66,16 @@ public class VrStreamView extends GLSurfaceView {
         setKeepScreenOn(true);
     }
 
-    /** Must be called once, before the view is attached to a window. */
-    public void configure(VrConfig config, Listener listener) {
+    /**
+     * Must be called once, before the view is attached to a window.
+     *
+     * @param headTracking  false keeps the virtual screen fixed straight ahead, whatever the head does
+     * @param refreshRateHz the display refresh rate to ask for, or {@link RefreshRate#HIGHEST}
+     */
+    public void configure(VrConfig config, boolean headTracking, int refreshRateHz, Listener listener) {
         this.listener = listener;
+        this.headTracking = headTracking;
+        this.refreshRateHz = refreshRateHz;
         renderer = new VrRenderer(config, tracker, (surface, recreated) -> post(() -> {
             if (!glSurfaceAlive) {
                 return;
@@ -82,7 +95,10 @@ public class VrStreamView extends GLSurfaceView {
         }));
         setRenderer(renderer);
         setRenderMode(RENDERMODE_CONTINUOUSLY);
-        if (!tracker.isAvailable()) {
+        if (!headTracking) {
+            LimeLog.info("VR: head tracking is off in settings, the screen stays fixed to the view");
+        }
+        else if (!tracker.isAvailable()) {
             LimeLog.warning("VR: the screen will stay fixed to the view because this phone has no rotation sensor");
         }
     }
@@ -99,7 +115,10 @@ public class VrStreamView extends GLSurfaceView {
 
     /** Call from the activity's onResume(). */
     public void startTracking() {
-        tracker.start();
+        if (headTracking) {
+            // Without samples the renderer keeps its initial pose, so the screen stays straight ahead
+            tracker.start();
+        }
         recenter();
     }
 
@@ -119,16 +138,17 @@ public class VrStreamView extends GLSurfaceView {
     @Override
     public void surfaceCreated(SurfaceHolder holder) {
         glSurfaceAlive = true;
-        requestHighestRefreshRate(holder.getSurface());
+        requestRefreshRate(holder.getSurface());
         super.surfaceCreated(holder);
     }
 
     /**
-     * Asks for the display's highest refresh rate at the current resolution (120 Hz on a Galaxy S22 Ultra).
-     * Head motion is redrawn every refresh, so a higher rate means less lag and smearing when turning the head,
-     * even though the desktop stream itself stays at its own frame rate.
+     * Asks for the refresh rate from the settings, by default the display's highest at the current resolution
+     * (120 Hz on a Galaxy S22 Ultra). Head motion is redrawn every refresh, so a higher rate means less lag and
+     * smearing when turning the head, even though the desktop stream itself stays at its own frame rate; a lower
+     * one saves battery and heat.
      */
-    private void requestHighestRefreshRate(Surface surface) {
+    private void requestRefreshRate(Surface surface) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) {
             return;
         }
@@ -137,14 +157,25 @@ public class VrStreamView extends GLSurfaceView {
             return;
         }
         Display.Mode current = display.getMode();
-        float best = current.getRefreshRate();
-        for (Display.Mode mode : display.getSupportedModes()) {
+        Display.Mode[] modes = display.getSupportedModes();
+        float[] available = new float[modes.length + 1];
+        int count = 0;
+        available[count++] = current.getRefreshRate();
+        for (Display.Mode mode : modes) {
             if (mode.getPhysicalWidth() == current.getPhysicalWidth() &&
                     mode.getPhysicalHeight() == current.getPhysicalHeight()) {
-                best = Math.max(best, mode.getRefreshRate());
+                available[count++] = mode.getRefreshRate();
             }
         }
-        LimeLog.info("VR: requesting " + best + " Hz");
+        float best = RefreshRate.choose(Arrays.copyOf(available, count), refreshRateHz);
+        if (RefreshRate.isBelowWanted(best, refreshRateHz)) {
+            LimeLog.warning("VR: " + refreshRateHz + " Hz isn't available, the system allows up to " + best +
+                    " Hz (on Samsung, set Motion smoothness to Adaptive)");
+            Toast.makeText(getContext(), getContext().getString(R.string.vr_refresh_rate_capped, refreshRateHz,
+                    Math.round(best)), Toast.LENGTH_LONG).show();
+        }
+        LimeLog.info("VR: requesting " + best + " Hz" +
+                (refreshRateHz == RefreshRate.HIGHEST ? " (highest available)" : " (setting: " + refreshRateHz + " Hz)"));
         try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
                 surface.setFrameRate(best, Surface.FRAME_RATE_COMPATIBILITY_DEFAULT, Surface.CHANGE_FRAME_RATE_ALWAYS);

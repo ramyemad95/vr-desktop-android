@@ -130,6 +130,18 @@
         <item>cardboard_v1</item>
         <item>none</item>
     </string-array>
+    <string-array name="vr_refresh_rate_names">
+        <item>@string/vr_refresh_rate_highest</item>
+        <item>@string/vr_refresh_rate_120</item>
+        <item>@string/vr_refresh_rate_96</item>
+        <item>@string/vr_refresh_rate_60</item>
+    </string-array>
+    <string-array name="vr_refresh_rate_values" translatable="false">
+        <item>0</item>
+        <item>120</item>
+        <item>96</item>
+        <item>60</item>
+    </string-array>
 
     <string-array name="video_frame_pacing_values" translatable="false">
         <item>latency</item>

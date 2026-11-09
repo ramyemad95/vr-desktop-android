@@ -561,7 +561,7 @@ public class Game extends Activity implements SurfaceHolder.Callback,
         vrView = new VrStreamView(this);
         // Draw above the StreamView's (unused) surface but below the overlays
         vrView.setZOrderMediaOverlay(true);
-        vrView.configure(vrConfig, new VrStreamView.Listener() {
+        vrView.configure(vrConfig, prefConfig.vrHeadTracking, prefConfig.vrRefreshRate, new VrStreamView.Listener() {
             @Override
             public void onVideoSurfaceAvailable(Surface surface) {
                 surfaceCreated = true;
@@ -579,7 +579,7 @@ public class Game extends Activity implements SurfaceHolder.Callback,
         parent.addView(vrView, parent.indexOfChild(streamView) + 1, new FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT));
 
-        if (!vrView.hasHeadTracking()) {
+        if (prefConfig.vrHeadTracking && !vrView.hasHeadTracking()) {
             Toast.makeText(this, R.string.vr_no_head_tracking, Toast.LENGTH_LONG).show();
         }
     }
