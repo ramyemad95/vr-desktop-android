@@ -35,7 +35,7 @@ import android.os.Process;
 import android.os.SystemClock;
 import android.util.Range;
 import android.view.Choreographer;
-import android.view.SurfaceHolder;
+import android.view.Surface;
 
 public class MediaCodecDecoderRenderer extends VideoDecoderRenderer implements Choreographer.FrameCallback {
 
@@ -67,7 +67,7 @@ public class MediaCodecDecoderRenderer extends VideoDecoderRenderer implements C
     private boolean refFrameInvalidationActive;
     private int initialWidth, initialHeight;
     private int videoFormat;
-    private SurfaceHolder renderTarget;
+    private Surface renderTarget;
     private volatile boolean stopping;
     private CrashListener crashListener;
     private boolean reportedCrash;
@@ -269,7 +269,8 @@ public class MediaCodecDecoderRenderer extends VideoDecoderRenderer implements C
         return decoderInfo;
     }
 
-    public void setRenderTarget(SurfaceHolder renderTarget) {
+    // A Surface rather than a SurfaceHolder, so the VR renderer can hand over its SurfaceTexture's surface
+    public void setRenderTarget(Surface renderTarget) {
         this.renderTarget = renderTarget;
     }
 
@@ -516,7 +517,7 @@ public class MediaCodecDecoderRenderer extends VideoDecoderRenderer implements C
 
         LimeLog.info("Configuring with format: "+format);
 
-        videoDecoder.configure(format, renderTarget.getSurface(), null, 0);
+        videoDecoder.configure(format, renderTarget, null, 0);
 
         configuredFormat = format;
 

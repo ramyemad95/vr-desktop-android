@@ -64,6 +64,9 @@ public class PreferenceConfiguration {
     private static final String ABSOLUTE_MOUSE_MODE_PREF_STRING = "checkbox_absolute_mouse_mode";
     private static final String ENABLE_AUDIO_FX_PREF_STRING = "checkbox_enable_audiofx";
     private static final String REDUCE_REFRESH_RATE_PREF_STRING = "checkbox_reduce_refresh_rate";
+    private static final String VR_MODE_PREF_STRING = "checkbox_vr_mode";
+    private static final String VR_VIEWER_PREF_STRING = "list_vr_viewer";
+    private static final String VR_SCREEN_SIZE_PREF_STRING = "seekbar_vr_screen_size";
     private static final String FULL_RANGE_PREF_STRING = "checkbox_full_range";
     private static final String GAMEPAD_TOUCHPAD_AS_MOUSE_PREF_STRING = "checkbox_gamepad_touchpad_as_mouse";
     private static final String GAMEPAD_MOTION_SENSORS_PREF_STRING = "checkbox_gamepad_motion_sensors";
@@ -104,6 +107,9 @@ public class PreferenceConfiguration {
     private static final boolean DEFAULT_ABSOLUTE_MOUSE_MODE = false;
     private static final boolean DEFAULT_ENABLE_AUDIO_FX = false;
     private static final boolean DEFAULT_REDUCE_REFRESH_RATE = false;
+    private static final boolean DEFAULT_VR_MODE = true;
+    private static final String DEFAULT_VR_VIEWER = "cardboard_v2";
+    private static final int DEFAULT_VR_SCREEN_SIZE = 70; // Degrees of horizontal view
     private static final boolean DEFAULT_FULL_RANGE = false;
     private static final boolean DEFAULT_GAMEPAD_TOUCHPAD_AS_MOUSE = false;
     private static final boolean DEFAULT_GAMEPAD_MOTION_SENSORS = true;
@@ -135,6 +141,9 @@ public class PreferenceConfiguration {
     public boolean showGuideButton;
     public boolean enableHdr;
     public boolean enablePip;
+    public boolean vrMode;
+    public String vrViewer;
+    public int vrScreenSizeDegrees;
     public boolean enablePerfOverlay;
     public boolean enableLatencyToast;
     public boolean bindAllUsb;
@@ -601,6 +610,17 @@ public class PreferenceConfiguration {
         config.gamepadTouchpadAsMouse = prefs.getBoolean(GAMEPAD_TOUCHPAD_AS_MOUSE_PREF_STRING, DEFAULT_GAMEPAD_TOUCHPAD_AS_MOUSE);
         config.gamepadMotionSensors = prefs.getBoolean(GAMEPAD_MOTION_SENSORS_PREF_STRING, DEFAULT_GAMEPAD_MOTION_SENSORS);
         config.gamepadMotionSensorsFallbackToDevice = prefs.getBoolean(GAMEPAD_MOTION_FALLBACK_PREF_STRING, DEFAULT_GAMEPAD_MOTION_FALLBACK);
+
+        config.vrMode = prefs.getBoolean(VR_MODE_PREF_STRING, DEFAULT_VR_MODE);
+        config.vrViewer = prefs.getString(VR_VIEWER_PREF_STRING, DEFAULT_VR_VIEWER);
+        config.vrScreenSizeDegrees = prefs.getInt(VR_SCREEN_SIZE_PREF_STRING, DEFAULT_VR_SCREEN_SIZE);
+        if (config.vrMode) {
+            // These don't work inside a VR viewer: the VR renderer draws SDR only, a picture-in-picture
+            // window can't be viewed through the lenses, and the on-screen controls can't be touched.
+            config.enableHdr = false;
+            config.enablePip = false;
+            config.onscreenController = false;
+        }
 
         return config;
     }

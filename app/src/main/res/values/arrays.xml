@@ -120,6 +120,17 @@
         <item>@string/pacing_balanced_alt</item>
         <item>@string/pacing_smoothness</item>
     </string-array>
+    <string-array name="vr_viewer_names">
+        <item>@string/vr_viewer_cardboard_v2</item>
+        <item>@string/vr_viewer_cardboard_v1</item>
+        <item>@string/vr_viewer_none</item>
+    </string-array>
+    <string-array name="vr_viewer_values" translatable="false">
+        <item>cardboard_v2</item>
+        <item>cardboard_v1</item>
+        <item>none</item>
+    </string-array>
+
     <string-array name="video_frame_pacing_values" translatable="false">
         <item>latency</item>
         <item>balanced</item>

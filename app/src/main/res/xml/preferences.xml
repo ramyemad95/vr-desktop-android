@@ -2,6 +2,32 @@
 <PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:seekbar="http://schemas.moonlight-stream.com/apk/res/seekbar">
 
+    <PreferenceCategory android:title="@string/category_vr_settings"
+        android:key="category_vr_settings">
+        <CheckBoxPreference
+            android:key="checkbox_vr_mode"
+            android:title="@string/title_checkbox_vr_mode"
+            android:summary="@string/summary_checkbox_vr_mode"
+            android:defaultValue="true" />
+        <ListPreference
+            android:key="list_vr_viewer"
+            android:dependency="checkbox_vr_mode"
+            android:title="@string/title_list_vr_viewer"
+            android:summary="@string/summary_list_vr_viewer"
+            android:entries="@array/vr_viewer_names"
+            android:entryValues="@array/vr_viewer_values"
+            android:defaultValue="cardboard_v2" />
+        <com.limelight.preferences.SeekBarPreference
+            android:key="seekbar_vr_screen_size"
+            android:dependency="checkbox_vr_mode"
+            android:defaultValue="70"
+            seekbar:min="30"
+            android:max="120"
+            seekbar:step="5"
+            android:summary="@string/summary_seekbar_vr_screen_size"
+            android:text="@string/suffix_seekbar_vr_screen_size"
+            android:title="@string/title_seekbar_vr_screen_size" />
+    </PreferenceCategory>
     <PreferenceCategory android:title="@string/category_basic_settings"
         android:key="category_basic_settings">
         <ListPreference

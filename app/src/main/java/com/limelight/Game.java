@@ -36,6 +36,9 @@ import com.limelight.utils.ServerHelper;
 import com.limelight.utils.ShortcutHelper;
 import com.limelight.utils.SpinnerDialog;
 import com.limelight.utils.UiHelper;
+import com.limelight.vr.VrConfig;
+import com.limelight.vr.VrStreamView;
+import com.limelight.vr.ViewerProfile;
 
 import android.annotation.SuppressLint;
 import android.annotation.TargetApi;
@@ -60,6 +63,7 @@ import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.IBinder;
+import android.util.DisplayMetrics;
 import android.util.Rational;
 import android.view.Display;
 import android.view.InputDevice;
@@ -137,6 +141,8 @@ public class Game extends Activity implements SurfaceHolder.Callback,
     private boolean waitingForAllModifiersUp = false;
     private int specialKeyCode = KeyEvent.KEYCODE_UNKNOWN;
     private StreamView streamView;
+    // Non-null in VR mode, where it replaces the StreamView as the video output
+    private VrStreamView vrView;
     private long lastAbsTouchUpTime = 0;
     private long lastAbsTouchDownTime = 0;
     private float lastAbsTouchUpX, lastAbsTouchUpY;
@@ -222,7 +228,7 @@ public class Game extends Activity implements SurfaceHolder.Callback,
         // Enter landscape unless we're on a square screen
         setPreferredOrientationForCurrentDisplay();
 
-        if (prefConfig.stretchVideo || shouldIgnoreInsetsForResolution(prefConfig.width, prefConfig.height)) {
+        if (prefConfig.vrMode || prefConfig.stretchVideo || shouldIgnoreInsetsForResolution(prefConfig.width, prefConfig.height)) {
             // Allow the activity to layout under notches if the fill-screen option
             // was turned on by the user or it's a full-screen native resolution
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
@@ -531,11 +537,60 @@ public class Game extends Activity implements SurfaceHolder.Callback,
             return;
         }
 
-        // The connection will be started when the surface gets created
-        streamView.getHolder().addCallback(this);
+        if (prefConfig.vrMode) {
+            // The decoder renders into the VR view's texture instead, and the connection
+            // starts once that texture's surface exists
+            addVrView();
+        }
+        else {
+            // The connection will be started when the surface gets created
+            streamView.getHolder().addCallback(this);
+        }
+    }
+
+    private void addVrView() {
+        // The VR view covers the whole screen (we lay out under the notch), so lens positions are
+        // computed against the real display size
+        DisplayMetrics metrics = new DisplayMetrics();
+        getWindowManager().getDefaultDisplay().getRealMetrics(metrics);
+        VrConfig vrConfig = new VrConfig(ViewerProfile.fromPreference(prefConfig.vrViewer),
+                prefConfig.vrScreenSizeDegrees, prefConfig.width, prefConfig.height,
+                VrConfig.metersPerPixel(Build.MODEL, Math.max(metrics.widthPixels, metrics.heightPixels),
+                        metrics.xdpi, metrics.ydpi, metrics.densityDpi));
+
+        vrView = new VrStreamView(this);
+        // Draw above the StreamView's (unused) surface but below the overlays
+        vrView.setZOrderMediaOverlay(true);
+        vrView.configure(vrConfig, new VrStreamView.Listener() {
+            @Override
+            public void onVideoSurfaceAvailable(Surface surface) {
+                surfaceCreated = true;
+                startConnectionOnSurface(surface);
+            }
+
+            @Override
+            public void onVideoSurfaceDestroyed() {
+                onRenderSurfaceDestroyed();
+            }
+        });
+
+        // The StreamView stays in place underneath, so it keeps input focus for keyboards and mice
+        FrameLayout parent = (FrameLayout) streamView.getParent();
+        parent.addView(vrView, parent.indexOfChild(streamView) + 1, new FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT));
+
+        if (!vrView.hasHeadTracking()) {
+            Toast.makeText(this, R.string.vr_no_head_tracking, Toast.LENGTH_LONG).show();
+        }
     }
 
     private void setPreferredOrientationForCurrentDisplay() {
+        if (prefConfig.vrMode) {
+            // Phone VR viewers hold the phone in landscape. Lock it, so looking up or down can't flip the image.
+            setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE);
+            return;
+        }
+
         Display display = getWindowManager().getDefaultDisplay();
 
         // For semi-square displays, we use more complex logic to determine which orientation to use (if any)
@@ -1061,7 +1116,20 @@ public class Game extends Activity implements SurfaceHolder.Callback,
     }
 
     @Override
+    protected void onResume() {
+        super.onResume();
+
+        if (vrView != null) {
+            vrView.startTracking();
+        }
+    }
+
+    @Override
     protected void onPause() {
+        if (vrView != null) {
+            vrView.stopTracking();
+        }
+
         if (isFinishing()) {
             // Stop any further input device notifications before we lose focus (and pointer capture)
             if (controllerHandler != null) {
@@ -2267,7 +2335,7 @@ public class Game extends Activity implements SurfaceHolder.Callback,
                     LimeLog.severe(stage + " failed: " + errorCode);
 
                     // If video initialization failed and the surface is still valid, display extra information for the user
-                    if (stage.contains("video") && streamView.getHolder().getSurface().isValid()) {
+                    if (stage.contains("video") && (vrView != null ? vrView : streamView).getHolder().getSurface().isValid()) {
                         Toast.makeText(Game.this, getResources().getText(R.string.video_decoder_init_failed), Toast.LENGTH_LONG).show();
                     }
 
@@ -2508,13 +2576,17 @@ public class Game extends Activity implements SurfaceHolder.Callback,
             throw new IllegalStateException("Surface changed before creation!");
         }
 
+        startConnectionOnSurface(holder.getSurface());
+    }
+
+    private void startConnectionOnSurface(Surface surface) {
         if (!attemptedConnection) {
             attemptedConnection = true;
 
             // Update GameManager state to indicate we're "loading" while connecting
             UiHelper.notifyStreamConnecting(Game.this);
 
-            decoderRenderer.setRenderTarget(holder);
+            decoderRenderer.setRenderTarget(surface);
             conn.start(new AndroidAudioRenderer(Game.this, prefConfig.enableAudioFx),
                     decoderRenderer, Game.this);
         }
@@ -2567,6 +2639,10 @@ public class Game extends Activity implements SurfaceHolder.Callback,
             throw new IllegalStateException("Surface destroyed before creation!");
         }
 
+        onRenderSurfaceDestroyed();
+    }
+
+    private void onRenderSurfaceDestroyed() {
         if (attemptedConnection) {
             // Let the decoder know immediately that the surface is gone
             decoderRenderer.prepareForStop();
