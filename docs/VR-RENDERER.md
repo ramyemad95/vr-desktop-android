@@ -66,6 +66,12 @@ can be read from a viewer's Cardboard QR profile and added as a new preset later
   Refresh rate picks a fixed rate (120, 96 or 60 Hz) instead of the highest.
 - **Head tracking:** VR Settings → Head tracking off leaves the sensor stopped, so the renderer keeps its initial
   pose and the screen stays straight ahead (the same path as a phone without a rotation sensor).
+- **Stats panel:** VR Settings → Stats panel. `MediaCodecDecoderRenderer` builds a `VrStats` from Moonlight's
+  one-second counters (also when the 2D perf overlay is off) and Moonlight's poor-connection callback marks the
+  network red. `VrStatsPanel` draws three lines into a 1024×256 bitmap; the renderer uploads it with mipmaps once
+  a second and the fragment shader samples it on a 30°-wide rectangle in the screen's plane, below the screen.
+  The panel's sampler stays on texture unit 1 even when the panel is off, because GLES 2 rejects draws where
+  samplers of different types share a unit.
 - **App category:** the app is marked as a productivity app, not a game, so Samsung's Game Booster/GOS doesn't
   throttle it or lower its resolution.
 - **Streaming:** 1920×1080 at 60 fps, 40–50 Mbps HEVC. A higher desktop resolution adds detail the eye can't

@@ -41,6 +41,12 @@
             android:entries="@array/vr_refresh_rate_names"
             android:entryValues="@array/vr_refresh_rate_values"
             android:defaultValue="0" />
+        <CheckBoxPreference
+            android:key="checkbox_vr_stats_panel"
+            android:dependency="checkbox_vr_mode"
+            android:title="@string/title_checkbox_vr_stats_panel"
+            android:summary="@string/summary_checkbox_vr_stats_panel"
+            android:defaultValue="false" />
     </PreferenceCategory>
     <PreferenceCategory android:title="@string/category_basic_settings"
         android:key="category_basic_settings">

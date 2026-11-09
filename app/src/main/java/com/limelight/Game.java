@@ -37,6 +37,7 @@ import com.limelight.utils.ShortcutHelper;
 import com.limelight.utils.SpinnerDialog;
 import com.limelight.utils.UiHelper;
 import com.limelight.vr.VrConfig;
+import com.limelight.vr.VrStats;
 import com.limelight.vr.VrStreamView;
 import com.limelight.vr.ViewerProfile;
 
@@ -561,7 +562,8 @@ public class Game extends Activity implements SurfaceHolder.Callback,
         vrView = new VrStreamView(this);
         // Draw above the StreamView's (unused) surface but below the overlays
         vrView.setZOrderMediaOverlay(true);
-        vrView.configure(vrConfig, prefConfig.vrHeadTracking, prefConfig.vrRefreshRate, new VrStreamView.Listener() {
+        vrView.configure(vrConfig, prefConfig.vrHeadTracking, prefConfig.vrRefreshRate, prefConfig.vrStatsPanel,
+                new VrStreamView.Listener() {
             @Override
             public void onVideoSurfaceAvailable(Surface surface) {
                 surfaceCreated = true;
@@ -2444,6 +2446,11 @@ public class Game extends Activity implements SurfaceHolder.Callback,
         runOnUiThread(new Runnable() {
             @Override
             public void run() {
+                if (vrView != null) {
+                    // The notification overlay can't be seen through the lenses; the VR stats panel shows this instead
+                    vrView.setConnectionPoor(connectionStatus == MoonBridge.CONN_STATUS_POOR);
+                }
+
                 if (prefConfig.disableWarnings) {
                     return;
                 }
@@ -2744,6 +2751,15 @@ public class Game extends Activity implements SurfaceHolder.Callback,
                 performanceOverlayView.setText(text);
             }
         });
+    }
+
+    @Override
+    public void onVrStatsUpdate(VrStats stats) {
+        // Decoder thread. The VR view hands the numbers to its GL thread, so no hop to the UI thread is needed.
+        VrStreamView view = vrView;
+        if (view != null) {
+            view.updateStats(stats);
+        }
     }
 
     @Override

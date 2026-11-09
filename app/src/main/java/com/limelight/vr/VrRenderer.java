@@ -4,6 +4,7 @@ import android.graphics.SurfaceTexture;
 import android.opengl.GLES11Ext;
 import android.opengl.GLES20;
 import android.opengl.GLSurfaceView;
+import android.opengl.GLUtils;
 import android.view.Surface;
 
 import com.limelight.LimeLog;
@@ -13,6 +14,7 @@ import java.nio.ByteOrder;
 import java.nio.FloatBuffer;
 import java.nio.ShortBuffer;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 
 import javax.microedition.khronos.egl.EGLConfig;
 import javax.microedition.khronos.opengles.GL10;
@@ -34,6 +36,9 @@ final class VrRenderer implements GLSurfaceView.Renderer, SurfaceTexture.OnFrame
     /** Distance from the head to the virtual screen. The screen's size is set by its angular width instead. */
     private static final float SCREEN_DISTANCE_METERS = 2.0f;
     private static final int MESH_GRID_SIZE = 40;
+    /** The stats panel hangs below the virtual screen, this wide and this far under its bottom edge. */
+    private static final float PANEL_WIDTH_DEGREES = 30f;
+    private static final float PANEL_GAP_METERS = 0.06f;
 
     private static final String VERTEX_SHADER =
             "attribute vec2 aPosition;\n" +
@@ -59,6 +64,10 @@ final class VrRenderer implements GLSurfaceView.Renderer, SurfaceTexture.OnFrame
             "uniform float uMaxTan2;\n" +
             "uniform float uHasFrame;\n" +
             "uniform vec2 uVideoSize;\n" +
+            "uniform sampler2D uPanelTex;\n" +
+            "uniform float uPanel;\n" +
+            "uniform vec2 uPanelCenter;\n" +
+            "uniform vec2 uPanelHalfSize;\n" +
             "varying vec2 vTan;\n" +
             "\n" +
             "vec3 sampleVideo(vec2 uv) {\n" +
@@ -108,6 +117,14 @@ final class VrRenderer implements GLSurfaceView.Renderer, SurfaceTexture.OnFrame
             "        }\n" +
             "        color = mix(color, screen, coverage);\n" +
             "    }\n" +
+            // The stats panel lies in the same plane, below the screen. Its bitmap is premultiplied and has mipmaps;
+            // the branch is on a uniform, so the texture's derivatives stay defined.
+            "    if (uPanel > 0.5) {\n" +
+            "        vec2 puv = (uEyePos.xy + t * dir.xy - uPanelCenter) / (2.0 * uPanelHalfSize) + 0.5;\n" +
+            "        vec4 panel = texture2D(uPanelTex, vec2(puv.x, 1.0 - puv.y));\n" +
+            "        float inside = (dir.z < 0.0 && puv.x >= 0.0 && puv.x <= 1.0 && puv.y >= 0.0 && puv.y <= 1.0) ? 1.0 : 0.0;\n" +
+            "        color = color * (1.0 - panel.a * inside) + panel.rgb * inside;\n" +
+            "    }\n" +
             "    gl_FragColor = vec4(color * lensFade, 1.0);\n" +
             "}\n";
 
@@ -139,10 +156,34 @@ final class VrRenderer implements GLSurfaceView.Renderer, SurfaceTexture.OnFrame
     private final float[] headToSceneColumnMajor = new float[9];
     private final float[] eyePos = new float[3];
 
-    VrRenderer(VrConfig config, HeadTracker tracker, SurfaceListener surfaceListener) {
+    // Stats panel: null when it's off in the settings
+    private final VrStatsPanel statsPanel;
+    private final AtomicReference<VrStats> pendingStats = new AtomicReference<>();
+    private volatile boolean connectionPoor;
+    private int uPanelTex, uPanel, uPanelCenter, uPanelHalfSize;
+    private int panelTexture;
+    private VrStats shownStats;
+    private boolean shownConnectionPoor;
+    private boolean panelDirty;
+    private long fpsWindowStartNanos;
+    private int fpsWindowFrames;
+    private float vrFps = -1f;
+
+    VrRenderer(VrConfig config, HeadTracker tracker, boolean statsPanel, SurfaceListener surfaceListener) {
         this.config = config;
         this.tracker = tracker;
+        this.statsPanel = statsPanel ? new VrStatsPanel() : null;
         this.surfaceListener = surfaceListener;
+    }
+
+    /** Any thread. Shows {@code stats} on the stats panel at the next frame, if the panel is on. */
+    void postStats(VrStats stats) {
+        pendingStats.set(stats);
+    }
+
+    /** Any thread. Moonlight's own verdict on the connection (CONN_STATUS_POOR or OKAY). */
+    void setConnectionPoor(boolean poor) {
+        connectionPoor = poor;
     }
 
     void setDisplayRotation(int rotation) {
@@ -189,6 +230,23 @@ final class VrRenderer implements GLSurfaceView.Renderer, SurfaceTexture.OnFrame
         uMaxTan2 = GLES20.glGetUniformLocation(program, "uMaxTan2");
         uHasFrame = GLES20.glGetUniformLocation(program, "uHasFrame");
         uVideoSize = GLES20.glGetUniformLocation(program, "uVideoSize");
+        uPanelTex = GLES20.glGetUniformLocation(program, "uPanelTex");
+        uPanel = GLES20.glGetUniformLocation(program, "uPanel");
+        uPanelCenter = GLES20.glGetUniformLocation(program, "uPanelCenter");
+        uPanelHalfSize = GLES20.glGetUniformLocation(program, "uPanelHalfSize");
+        if (statsPanel != null) {
+            int[] panelTex = new int[1];
+            GLES20.glGenTextures(1, panelTex, 0);
+            panelTexture = panelTex[0];
+            GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, panelTexture);
+            GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_MIN_FILTER, GLES20.GL_LINEAR_MIPMAP_LINEAR);
+            GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_MAG_FILTER, GLES20.GL_LINEAR);
+            GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_WRAP_S, GLES20.GL_CLAMP_TO_EDGE);
+            GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_WRAP_T, GLES20.GL_CLAMP_TO_EDGE);
+            GLUtils.texImage2D(GLES20.GL_TEXTURE_2D, 0, statsPanel.draw(shownStats, shownConnectionPoor, vrFps), 0);
+            GLES20.glGenerateMipmap(GLES20.GL_TEXTURE_2D);
+            panelDirty = false;
+        }
 
         int[] tex = new int[1];
         GLES20.glGenTextures(1, tex, 0);
@@ -242,6 +300,8 @@ final class VrRenderer implements GLSurfaceView.Renderer, SurfaceTexture.OnFrame
         }
 
         updateHeadPose();
+        measureFrameRate();
+        updateStatsPanel();
 
         GLES20.glDisable(GLES20.GL_SCISSOR_TEST);
         GLES20.glClearColor(0f, 0f, 0f, 1f);
@@ -264,6 +324,24 @@ final class VrRenderer implements GLSurfaceView.Renderer, SurfaceTexture.OnFrame
         GLES20.glUniform1f(uMaxTan2, maxTan * maxTan);
         GLES20.glUniform1f(uHasFrame, hasFrame ? 1f : 0f);
         GLES20.glUniform2f(uVideoSize, config.videoWidth, config.videoHeight);
+        // The panel's sampler always points at unit 1, even when unused: GLES 2 rejects a draw where samplers of
+        // different types (here the external video on unit 0) share a unit.
+        GLES20.glUniform1i(uPanelTex, 1);
+        if (statsPanel != null) {
+            GLES20.glActiveTexture(GLES20.GL_TEXTURE1);
+            GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, panelTexture);
+            float panelHalfWidth = (float) (SCREEN_DISTANCE_METERS * Math.tan(Math.toRadians(PANEL_WIDTH_DEGREES / 2.0)));
+            float panelHalfHeight = panelHalfWidth * VrStatsPanel.HEIGHT / VrStatsPanel.WIDTH;
+            float screenHalfHeight = halfWidth * config.videoHeight / config.videoWidth;
+            GLES20.glUniform1f(uPanel, 1f);
+            GLES20.glUniform2f(uPanelCenter, 0f, -(screenHalfHeight + PANEL_GAP_METERS + panelHalfHeight));
+            GLES20.glUniform2f(uPanelHalfSize, panelHalfWidth, panelHalfHeight);
+            // SurfaceTexture.updateTexImage() binds to the active unit, so leave unit 0 active for the next frame
+            GLES20.glActiveTexture(GLES20.GL_TEXTURE0);
+        }
+        else {
+            GLES20.glUniform1f(uPanel, 0f);
+        }
 
         int eyeWidth = viewWidth / 2;
         for (int eye = LensDistortion.LEFT_EYE; eye <= LensDistortion.RIGHT_EYE; eye++) {
@@ -292,6 +370,48 @@ final class VrRenderer implements GLSurfaceView.Renderer, SurfaceTexture.OnFrame
         GLES20.glClearColor(0.35f, 0.35f, 0.35f, 1f);
         GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT);
         GLES20.glDisable(GLES20.GL_SCISSOR_TEST);
+    }
+
+    /** How often this view is actually redrawn, over one-second windows. Shown on the stats panel. */
+    private void measureFrameRate() {
+        long now = System.nanoTime();
+        if (fpsWindowStartNanos == 0) {
+            fpsWindowStartNanos = now;
+            return;
+        }
+        fpsWindowFrames++;
+        long elapsed = now - fpsWindowStartNanos;
+        if (elapsed >= 1_000_000_000L) {
+            vrFps = fpsWindowFrames * 1e9f / elapsed;
+            fpsWindowFrames = 0;
+            fpsWindowStartNanos = now;
+        }
+    }
+
+    /** Redraws the panel's texture when new stats arrive (about once a second) or the connection verdict flips. */
+    private void updateStatsPanel() {
+        if (statsPanel == null) {
+            return;
+        }
+        VrStats stats = pendingStats.getAndSet(null);
+        if (stats != null) {
+            shownStats = stats;
+            panelDirty = true;
+        }
+        boolean poor = connectionPoor;
+        if (poor != shownConnectionPoor) {
+            shownConnectionPoor = poor;
+            panelDirty = true;
+        }
+        if (!panelDirty) {
+            return;
+        }
+        GLES20.glActiveTexture(GLES20.GL_TEXTURE1);
+        GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, panelTexture);
+        GLUtils.texSubImage2D(GLES20.GL_TEXTURE_2D, 0, 0, 0, statsPanel.draw(shownStats, shownConnectionPoor, vrFps));
+        GLES20.glGenerateMipmap(GLES20.GL_TEXTURE_2D);
+        GLES20.glActiveTexture(GLES20.GL_TEXTURE0);
+        panelDirty = false;
     }
 
     private void updateHeadPose() {

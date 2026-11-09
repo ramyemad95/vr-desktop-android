@@ -71,12 +71,14 @@ public class VrStreamView extends GLSurfaceView {
      *
      * @param headTracking  false keeps the virtual screen fixed straight ahead, whatever the head does
      * @param refreshRateHz the display refresh rate to ask for, or {@link RefreshRate#HIGHEST}
+     * @param statsPanel    show network and latency stats on a panel below the virtual screen
      */
-    public void configure(VrConfig config, boolean headTracking, int refreshRateHz, Listener listener) {
+    public void configure(VrConfig config, boolean headTracking, int refreshRateHz, boolean statsPanel,
+                          Listener listener) {
         this.listener = listener;
         this.headTracking = headTracking;
         this.refreshRateHz = refreshRateHz;
-        renderer = new VrRenderer(config, tracker, (surface, recreated) -> post(() -> {
+        renderer = new VrRenderer(config, tracker, statsPanel, (surface, recreated) -> post(() -> {
             if (!glSurfaceAlive) {
                 return;
             }
@@ -105,6 +107,20 @@ public class VrStreamView extends GLSurfaceView {
 
     public boolean hasHeadTracking() {
         return tracker.isAvailable();
+    }
+
+    /** Any thread. New numbers for the stats panel; ignored when the panel is off. */
+    public void updateStats(VrStats stats) {
+        if (renderer != null) {
+            renderer.postStats(stats);
+        }
+    }
+
+    /** Any thread. Moonlight's verdict on the connection, shown on the stats panel. */
+    public void setConnectionPoor(boolean poor) {
+        if (renderer != null) {
+            renderer.setConnectionPoor(poor);
+        }
     }
 
     public void recenter() {

@@ -325,5 +325,7 @@
     <string name="vr_refresh_rate_120">120 Hz</string>
     <string name="vr_refresh_rate_96">96 Hz</string>
     <string name="vr_refresh_rate_60">60 Hz</string>
+    <string name="title_checkbox_vr_stats_panel">Stats panel</string>
+    <string name="summary_checkbox_vr_stats_panel">Show a panel below the virtual screen with the network status (green OK, yellow unstable, red poor), the PC\'s encode time and the phone\'s decode time. Look down to read it.</string>
     <string name="vr_refresh_rate_capped">%1$d Hz isn\'t available, so the view runs at %2$d Hz. On Samsung phones, set Settings → Display → Motion smoothness to Adaptive.</string>
 </resources>

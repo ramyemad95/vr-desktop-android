@@ -66,6 +66,10 @@ The Windows PC runs Sunshine, set up by the VR Desktop Host app from
   - **Head tracking:** on by default. Turn it off to keep the screen fixed in front of your eyes.
   - **Refresh rate:** "Highest available" by default (120 Hz). Pick 60 Hz to save battery and heat. Anything above
     60 Hz needs Motion smoothness set to Adaptive; if it isn't, the app shows a message and runs at 60 Hz.
+  - **Stats panel:** off by default. Shows a panel below the virtual screen (look down): `NET OK/UNSTABLE/POOR`
+    in green/yellow/red with the round-trip time, the frames arriving from the PC against the target
+    (`in 33/60 fps` means the PC or the game only delivers 33), and the PC's encode, phone's decode and VR redraw
+    times. Yellow or red on the last line means the PC or the phone needs most of a frame's time.
   - **VR mode:** turn it off to check the stream as a normal flat Moonlight stream.
 - Recommended stream settings for the S22 Ultra: **1080p, 60 FPS, 40–50 Mbps**, and 150% scaling in Windows.
 
