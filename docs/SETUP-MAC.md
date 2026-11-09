@@ -1,21 +1,78 @@
-# Mac setup
+# Mac setup and first test on the Galaxy S22 Ultra
 
-1. **Tools**
+The Mac builds the app and installs it on the phone. The stream itself goes straight from the Windows PC to the
+phone; the Mac isn't involved.
+
+## 1. Tools
+```bash
+brew install git
+```
+```bash
+brew install --cask android-studio android-platform-tools
+```
+In Android Studio → Settings → Languages & Frameworks → Android SDK:
+- **SDK Platforms:** Android API 37.
+- **SDK Tools:** NDK (Side by side) **29.0.14206865** (tick "Show Package Details") and CMake.
+
+Android Studio also downloads anything else the project asks for the first time it builds.
+
+## 2. The repo
+Moonlight's network core is a git submodule, so clone with `--recurse-submodules`:
+```bash
+git clone --recurse-submodules https://github.com/ramyemad95/vr-desktop-android.git
+```
+If you already cloned it without that flag:
+```bash
+git submodule update --init --recursive
+```
+Open the folder in Android Studio. In **Build Variants**, pick **nonRootDebug**.
+
+## 3. The S22 Ultra
+1. Settings → About phone → Software information: tap **Build number** 7 times to turn on Developer options.
+2. Settings → Developer options: turn on **USB debugging**. Connect the phone to the Mac and tap **Allow** on the
+   phone. It should then show up here:
    ```bash
-   brew install git
-   brew install --cask android-studio android-platform-tools
+   adb devices
    ```
-   In Android Studio → SDK Manager, install: **NDK (Side by side)**, **CMake**, and Android SDK 34+.
-2. **The repo**
-   ```bash
-   git clone https://github.com/ramyemad95/vr-desktop-android.git
-   ```
-3. **Phone:** turn on Developer options → USB debugging, connect it over USB, and check it shows up in `adb devices`.
-   Use a 1440p+ phone if you can, because text readability is the hardest part.
-4. **Import Moonlight:** run `scripts/import-moonlight.sh` (it pulls the upstream code into `app/` as a starting point).
-5. **Testing against the PC:** the phone and the Windows PC must be on the same network, or the phone must be
-   connected to the PC over USB tethering. The Mac only builds and installs the app.
+3. Settings → Display → **Screen resolution: WQHD+** (sharper text in VR).
+4. Settings → Display → **Motion smoothness: Adaptive** (120 Hz head tracking).
+
+Press **Run** in Android Studio. The app is called **VR Desktop (Debug)** and installs next to Moonlight if you have it.
+
+No Android Studio yet? Every push builds the APK on GitHub: open the repo's **Actions** tab → **Android build** →
+the latest run → **Artifacts**. Then install it with:
+```bash
+adb install -r app-nonRoot-debug.apk
+```
+
+## 4. Connect to the PC
+The Windows PC runs Sunshine, set up by the VR Desktop Host app from
+[vr-desktop-host](https://github.com/ramyemad95/vr-desktop-host).
+
+1. **Link:** the phone and PC must be on the same network. For the lowest latency, use a USB cable with
+   **USB tethering** on the phone (Settings → Connections → Mobile Hotspot and Tethering → USB tethering). The host
+   app lists the PC's addresses, best first.
+2. **Add the PC:** in VR Desktop on the phone, tap **+** and type the address from the host app.
+3. **Pair:** tap the PC. The phone shows a PIN. On the PC, click **Open Sunshine (pair phone)** in the host app and
+   enter that PIN.
+4. **Stream:** tap **Desktop**.
+
+## 5. In the viewer
+- Put the phone in the viewer and tap the screen (or press the viewer's button) to bring the virtual screen in front
+  of you. Do this again any time it drifts.
+- In the phone's VR Desktop **Settings → VR Settings**:
+  - **Virtual screen size:** 70° is the default. Go bigger to read small text, smaller to see the whole screen at once.
+  - **VR viewer:** if straight lines look bent, try another lens type.
+  - **VR mode:** turn it off to check the stream as a normal flat Moonlight stream.
+- Recommended stream settings for the S22 Ultra: **1080p, 60 FPS, 40–50 Mbps**, and 150% scaling in Windows.
+
+## What to report back after the first test
+- Does the picture appear, and is it upright?
+- Does the screen stay still when you turn your head? Does it move the right way?
+- Are straight lines straight through the lenses, and do the two eyes merge into one image?
+- How readable is text at 70°?
+- Does the phone get hot, and after how long?
 
 ## Working across the two laptops
-- Sync with `git pull` before you start and `git push` when you're done.
+- Run `git pull` before you start and `git push` when you're done.
 - Protocol or port changes go in `docs/PROTOCOL.md` in **both** repos.
