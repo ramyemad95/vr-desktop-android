@@ -116,6 +116,13 @@ public class VrStreamView extends GLSurfaceView {
         }
     }
 
+    /** Any thread. Whether the PC is sending HDR10; the renderer tone-maps it to SDR. */
+    public void setHdrMode(boolean enabled) {
+        if (renderer != null) {
+            renderer.setHdr(enabled);
+        }
+    }
+
     /** Any thread. Moonlight's verdict on the connection, shown on the stats panel. */
     public void setConnectionPoor(boolean poor) {
         if (renderer != null) {

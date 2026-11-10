@@ -5,26 +5,36 @@ Code: [`app/src/main/java/com/limelight/vr/`](../app/src/main/java/com/limelight
 ## Pipeline
 1. **Decode:** Moonlight's `MediaCodecDecoderRenderer`, unchanged except that it now takes a `Surface` instead of a
    `SurfaceHolder`. In VR mode, that surface belongs to a `SurfaceTexture`, so decoded frames stay on the GPU.
-2. **Latch:** `VrRenderer.onDrawFrame` runs every display refresh (120 Hz on a Galaxy S22 Ultra). It latches every
-   frame queued since the last draw, so the newest frame is shown, and redraws the head pose even when the desktop
-   doesn't change.
-3. **Draw, per eye:** one 40×40 grid mesh per eye covers half the screen. Each vertex holds the view angle the eye
-   sees at that point through the lens (the lens correction is built in). For each pixel, the fragment shader:
+2. **Latch and prefilter (once per video frame):** `VrRenderer.onDrawFrame` runs every display refresh (120 Hz on
+   a Galaxy S22 Ultra) and latches every frame queued since the last draw. Only when a new frame arrived, it draws
+   it 1:1 into an RGBA texture at the stream's resolution (tone-mapping HDR10 on the way, see below) and rebuilds
+   that texture's mipmaps. Reading the decoder's YUV texture is the costly part of sampling, so this reads each
+   video pixel once per video frame, instead of 9–13 times per display pixel per refresh as before (which pushed
+   an S22 Ultra in a viewer to thermal throttling at 120 Hz with a 4K stream). A still desktop costs nothing here.
+3. **Draw, per eye (every refresh):** one 40×40 grid mesh per eye covers half the screen. Each vertex holds the view
+   angle the eye sees at that point through the lens (the lens correction is built in). For each pixel, the
+   fragment shader:
    - turns that angle into a ray and rotates it by the head pose,
    - intersects it with the virtual screen plane (2 m away; its width is set in degrees in Settings),
-   - samples the video there.
+   - samples the prefiltered frame there, once.
 
-   The video is sampled once, straight from the decoder's texture. This is sharper than the usual
-   "render each eye to a buffer, then distort the buffer" approach, which resamples twice.
-4. **Anti-aliasing:** the desktop usually has more pixels than the eye can see (for example, 1920 desktop pixels
-   across about 900 eye pixels). Decoder textures can't have mipmaps, so where the image is shrunk, the shader
-   averages 4 taps inside each pixel's footprint, and a 3×3 box of 9 taps above 2 desktop pixels per eye pixel
-   (a 4K stream on a 90–100° screen is 2.1–2.5). Where it's magnified, it takes 1 tap. The screen's edges are
-   anti-aliased too.
-5. **Sharpening:** VR Settings → Sharpness (0–100%, off by default) adds an unsharp mask at the scale of one
-   phone pixel, against a 4-tap blur on the diagonals, to make up for the lens's and the downscale's softening.
-   On a Galaxy S22 Ultra at 120 Hz with a 4K stream, 9 taps plus sharpening hold 120 fps with no late frames
-   (GPU about 75% busy at 421 of 818 MHz).
+   That single sample in the final view is still sharper than the usual "render each eye to a buffer, then
+   distort the buffer" approach, which resamples twice.
+4. **Anti-aliasing:** the desktop usually has more pixels than the eye can see (a 4K stream on a 90–100° screen is
+   2.1–2.5 desktop pixels per eye pixel). The mipmaps do the downscaling: one trilinear sample with a −0.5 level
+   bias (half a level sharper than the footprint, which keeps text crisp) and anisotropic filtering up to 4× for
+   the stretched footprints toward the lens's edge. Sampling happens for every pixel, in uniform control flow, so
+   the hardware's level selection is defined. The screen's edges are anti-aliased too. Without NPOT mipmap
+   support (GLES 2 without OES_texture_npot) the frame falls back to bilinear only.
+5. **HDR:** with Moonlight's "Enable HDR" on, the PC sends HDR10 (PQ, BT.2020) whenever its display is in HDR,
+   and Moonlight's `setHdrMode` tells the VR view. The view still draws to an SDR surface, so the prefilter
+   tone-maps each decoded pixel (`HdrToneMap`): PQ to nits, BT.2020 to BT.709, SDR reference white at 203 nits
+   (ITU-R BT.2408), a smooth roll-off above 75% of white on the brightest channel (keeps hues), then gamma 2.2.
+   Without it an HDR desktop or game looks washed out. The stats panel's video line shows `HDR` while it's on.
+   Moonlight restarts the decoder each time the PC switches HDR on or off ("Trying to restart decoder after
+   CodecException" in the log); that's expected.
+6. **Sharpening:** VR Settings → Sharpness (0–100%, off by default) adds an unsharp mask against the next mip
+   level (one more sample), to make up for the lens's and the downscale's softening.
 
 ## Lens model (`LensDistortion`, `ViewerProfile`)
 This is Cardboard's viewer-profile model: `eye = screen · (1 + k1·r² + k2·r⁴)`, where both values are tangents

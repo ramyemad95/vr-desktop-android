@@ -84,6 +84,10 @@ The Windows PC runs Sunshine, set up by the VR Desktop Host app from
     (`in 33/60 fps` means the PC or the game only delivers 33), and the PC's encode, phone's decode and VR redraw
     times. Yellow or red on the last line means the PC or the phone needs most of a frame's time.
   - **VR mode:** turn it off to check the stream as a normal flat Moonlight stream.
+- **HDR games:** turn on Settings → Advanced → **Enable HDR**. The PC then sends HDR when Windows is in HDR, and
+  the VR view converts it to the phone's SDR picture with the right colors (the stats panel shows `HDR`). With HDR
+  off in the app, an HDR game looks washed out: either turn this on, or turn HDR off in the game and Windows (or
+  set Sunshine's display-device HDR option to automatic so Windows follows the app).
 - Recommended stream settings for the S22 Ultra: **1080p, 60 FPS, 40–50 Mbps**, and 150% scaling in Windows.
 
 ## What to report back after the first test

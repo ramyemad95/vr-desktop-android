@@ -39,7 +39,7 @@ final class VrStatsPanel {
      * @param stats null until the first second of video has arrived
      * @return the panel's bitmap, redrawn in place
      */
-    Bitmap draw(VrStats stats, boolean connectionPoor, float vrFps) {
+    Bitmap draw(VrStats stats, boolean connectionPoor, float vrFps, boolean hdr) {
         canvas.drawColor(Color.TRANSPARENT, PorterDuff.Mode.CLEAR);
         canvas.drawRoundRect(bounds, 28f, 28f, background);
         if (stats == null) {
@@ -47,7 +47,7 @@ final class VrStatsPanel {
             return bitmap;
         }
         drawLine(0, stats.networkLine(connectionPoor), colorOf(stats.network(connectionPoor)));
-        drawLine(1, stats.videoLine(), COLOR_TEXT);
+        drawLine(1, stats.videoLine(hdr), COLOR_TEXT);
         VrStats.Level processing = stats.processing();
         drawLine(2, stats.processingLine(vrFps), processing == VrStats.Level.GOOD ? COLOR_TEXT : colorOf(processing));
         return bitmap;

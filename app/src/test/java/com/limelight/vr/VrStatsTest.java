@@ -51,7 +51,8 @@ public class VrStatsTest {
     @Test
     public void linesShowTheMeasuredValues() {
         VrStats s = stats(0f, 5, 1, 4.25f, 6.04f);
-        assertEquals("VIDEO 2560x1440  in 60/60 fps", s.videoLine());
+        assertEquals("VIDEO 2560x1440  in 60/60 fps", s.videoLine(false));
+        assertEquals("VIDEO 2560x1440 HDR  in 60/60 fps", s.videoLine(true));
         assertEquals("PC 4.3 ms  DECODE 6.0 ms  VR 120 fps", s.processingLine(119.8f));
     }
 }

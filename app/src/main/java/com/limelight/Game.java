@@ -2567,6 +2567,11 @@ public class Game extends Activity implements SurfaceHolder.Callback,
     public void setHdrMode(boolean enabled, byte[] hdrMetadata) {
         LimeLog.info("Display HDR mode: " + (enabled ? "enabled" : "disabled"));
         decoderRenderer.setHdrMode(enabled, hdrMetadata);
+        VrStreamView view = vrView;
+        if (view != null) {
+            // The VR view draws to an SDR surface, so it tone-maps HDR10 frames itself
+            view.setHdrMode(enabled);
+        }
     }
 
     @Override

@@ -90,8 +90,10 @@ public final class VrStats {
         }
     }
 
-    public String videoLine() {
-        return String.format(Locale.US, "VIDEO %dx%d  in %.0f/%d fps", width, height, incomingFps, targetFps);
+    /** @param hdr the PC is sending HDR10, which the view tone-maps to SDR */
+    public String videoLine(boolean hdr) {
+        return String.format(Locale.US, "VIDEO %dx%d%s  in %.0f/%d fps", width, height, hdr ? " HDR" : "",
+                incomingFps, targetFps);
     }
 
     /** @param vrFps how often the VR view was redrawn, or a negative value if not measured yet */

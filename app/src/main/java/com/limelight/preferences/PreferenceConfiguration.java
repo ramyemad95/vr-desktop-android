@@ -655,9 +655,9 @@ public class PreferenceConfiguration {
             config.vrRefreshRate = 0;
         }
         if (config.vrMode) {
-            // These don't work inside a VR viewer: the VR renderer draws SDR only, a picture-in-picture
-            // window can't be viewed through the lenses, and the on-screen controls can't be touched.
-            config.enableHdr = false;
+            // These don't work inside a VR viewer: a picture-in-picture window can't be viewed through the
+            // lenses, and the on-screen controls can't be touched. HDR does: the VR renderer tone-maps HDR10
+            // to its SDR surface (HdrToneMap).
             config.enablePip = false;
             config.onscreenController = false;
         }
