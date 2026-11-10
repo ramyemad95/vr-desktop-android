@@ -17,6 +17,22 @@
             android:entries="@array/vr_viewer_names"
             android:entryValues="@array/vr_viewer_values"
             android:defaultValue="cardboard_v2" />
+        <ListPreference
+            android:key="list_vr_lens_distance"
+            android:dependency="checkbox_vr_mode"
+            android:title="@string/title_list_vr_lens_distance"
+            android:summary="@string/summary_list_vr_lens_distance"
+            android:entries="@array/vr_lens_distance_names"
+            android:entryValues="@array/vr_lens_distance_values"
+            android:defaultValue="0" />
+        <ListPreference
+            android:key="list_vr_screen_distance"
+            android:dependency="checkbox_vr_mode"
+            android:title="@string/title_list_vr_screen_distance"
+            android:summary="@string/summary_list_vr_screen_distance"
+            android:entries="@array/vr_screen_distance_names"
+            android:entryValues="@array/vr_screen_distance_values"
+            android:defaultValue="0" />
         <com.limelight.preferences.SeekBarPreference
             android:key="seekbar_vr_screen_size"
             android:dependency="checkbox_vr_mode"
@@ -42,6 +58,12 @@
             android:dependency="checkbox_vr_mode"
             android:title="@string/title_checkbox_vr_head_tracking"
             android:summary="@string/summary_checkbox_vr_head_tracking"
+            android:defaultValue="true" />
+        <CheckBoxPreference
+            android:key="checkbox_vr_recenter_vertical"
+            android:dependency="checkbox_vr_head_tracking"
+            android:title="@string/title_checkbox_vr_recenter_vertical"
+            android:summary="@string/summary_checkbox_vr_recenter_vertical"
             android:defaultValue="true" />
         <ListPreference
             android:key="list_vr_refresh_rate"

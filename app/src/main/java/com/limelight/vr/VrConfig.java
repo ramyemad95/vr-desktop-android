@@ -11,15 +11,18 @@ public final class VrConfig {
     public final float metersPerPixel;
     /** Strength of the unsharp mask on the video, 0 (off) to 1. */
     public final float sharpness;
+    /** A re-center also follows the head's pitch, so the screen goes where the user looks, up or down. */
+    public final boolean recenterVertically;
 
     public VrConfig(ViewerProfile viewer, float screenWidthDegrees, int videoWidth, int videoHeight, float metersPerPixel,
-                    float sharpness) {
+                    float sharpness, boolean recenterVertically) {
         this.viewer = viewer;
         this.screenWidthDegrees = screenWidthDegrees;
         this.videoWidth = videoWidth;
         this.videoHeight = videoHeight;
         this.metersPerPixel = metersPerPixel;
         this.sharpness = Math.max(0f, Math.min(1f, sharpness));
+        this.recenterVertically = recenterVertically;
     }
 
     /** The "Sharpness" setting, in percent, as an unsharp-mask strength. */

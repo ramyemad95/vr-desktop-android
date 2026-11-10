@@ -44,6 +44,20 @@ the two images merge, which brings the lenses to where the app draws them), the 
 half FOV from the stated field of view. cardoO doesn't publish distortion coefficients; the lens is the same class as
 Cardboard v2's, so it uses those (inside a 70° screen, v1's and v2's coefficients differ by about 1% at the edge).
 
+**Lens distance (IPD) setting:** overrides any preset's lens distance (50–75 mm), for viewers with an IPD dial
+whose user needs it away from 64 mm. Each eye's image is centered on its lens, so a mismatch of 2 mm per eye
+(the cardoO's dial at its 60 mm minimum against the presets' 64 mm) would need the eyes to turn about 3° outward
+each to merge the images, which they can't: the picture doubles and looks out of focus. The setting also sets the
+distance between the virtual eyes.
+
+**Screen to lens distance setting:** overrides the preset's screen-to-lens distance (25–60 mm in 0.5 mm steps, since the
+optical distance can differ from the dial's), for viewers with
+a focus dial. The mesh turns a point on the phone into a viewing angle as offset / distance, so a mismatch scales
+every angle: with the app's distance shorter than the real one, the picture moves less than the head turns and
+the screen seems to follow the head; longer, it seems to move against it. Blur itself is optical and only the
+dial fixes it. With "No lens correction" the lens's own distortion still grows toward the edges, so only the middle
+of the view can be made perfectly still; calibrate on the middle of the screen.
+
 The lens centers sit symmetrically around the middle of the screen, at mid-height. Placing them correctly needs
 the physical size of a pixel:
 - **Galaxy S22 Ultra (SM-S908\*):** taken from the panel's known width, 156.4 mm. This is correct at both FHD+ and
@@ -58,8 +72,10 @@ can be read from a viewer's Cardboard QR profile and added as a new preset later
 - The sensor is `TYPE_GAME_ROTATION_VECTOR` (gyroscope and accelerometer), read on its own thread at the fastest
   rate. This sensor doesn't jump when the magnetometer is disturbed by the PC or a metal desk. Its heading drifts
   slowly instead, and a tap re-centers it.
-- **Re-center** keeps only your heading. The screen always stays level and at eye height, even if you tap while
-  looking down.
+- **Re-center** puts the screen where you're looking. With VR Settings → "Re-center up and down too" (on by
+  default) it keeps your heading and pitch, so tapping while leaning back puts the screen above you, tilted to face
+  you. Off, it keeps only the heading and the screen stays level at eye height. Roll is always dropped, so the
+  screen's horizontal edges stay level.
 - The phone is locked to landscape in VR mode, so the display rotation is fixed.
 
 ## Integration with Moonlight (`Game.java`)

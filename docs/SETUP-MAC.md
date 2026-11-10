@@ -65,8 +65,18 @@ The Windows PC runs Sunshine, set up by the VR Desktop Host app from
   - **VR viewer:** if straight lines look bent, try another lens type. For the **cardoO VR Go**, pick that entry,
     center the phone on the line between the eyes, turn the IPD dial until the image is single, then the focus
     dial until text is sharp.
+  - **Lens distance (IPD):** for viewers with an IPD dial. If your eyes need the lenses closer or wider than
+    64 mm, set the dial there and the same distance here, or the two images won't merge. cardoO VR Go: 60 mm with
+    the lenses at their closest, 70 mm at their widest; try ±1 mm around that until the image is single and sharp.
+  - **Screen to lens distance (focus):** for viewers with a focus dial. Turn the dial until text is sharp (only
+    the dial fixes blur), then pick the value here at which the screen stays still when you turn your head: if
+    it drifts the way you turn, pick a bigger number; the other way, a smaller one. cardoO VR Go: about 37.5 mm
+    with the lenses closest to the phone, 46.5 mm farthest. Judge it on the middle of the screen: with "No lens
+    correction" the edges always drift a little, because the lens distorts more there.
   - **Sharpness:** off by default. 30–50% makes text crisper through the lenses; too much adds halos.
   - **Head tracking:** on by default. Turn it off to keep the screen fixed in front of your eyes.
+  - **Re-center up and down too:** on by default. A tap puts the screen where you look, higher or lower too
+    (handy lying back). Off keeps it at eye level.
   - **Refresh rate:** "Highest available" by default (120 Hz). Pick 60 Hz to save battery and heat. Anything above
     60 Hz needs Motion smoothness set to Adaptive; if it isn't, the app shows a message and runs at 60 Hz.
   - **Stats panel:** off by default. Shows a panel below the virtual screen (look down): `NET OK/UNSTABLE/POOR`

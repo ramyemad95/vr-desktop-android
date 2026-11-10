@@ -9,12 +9,35 @@ public class VrConfigTest {
     private static final float EPS = 1e-9f;
 
     @Test
+    public void lensDistanceSettingReplacesOnlyTheLensDistance() {
+        assertSame(ViewerProfile.CARDOO_VR_GO, ViewerProfile.fromPreferences("cardoo_vr_go", 0));
+        ViewerProfile narrow = ViewerProfile.fromPreferences("none", 60);
+        assertEquals(0.060f, narrow.interLensDistance, EPS);
+        assertEquals(ViewerProfile.NO_LENS.screenToLensDistance, narrow.screenToLensDistance, EPS);
+        assertEquals(ViewerProfile.NO_LENS.k1, narrow.k1, EPS);
+        assertEquals(ViewerProfile.NO_LENS.k2, narrow.k2, EPS);
+        assertEquals(ViewerProfile.NO_LENS.halfFovDegrees, narrow.halfFovDegrees, EPS);
+    }
+
+    @Test
+    public void screenDistanceSettingReplacesOnlyTheScreenDistance() {
+        ViewerProfile far = ViewerProfile.fromPreferences("cardoo_vr_go", 60, 45f);
+        assertEquals(0.045f, far.screenToLensDistance, EPS);
+        assertEquals(0.060f, far.interLensDistance, EPS);
+        assertEquals(ViewerProfile.CARDOO_VR_GO.k1, far.k1, EPS);
+        assertEquals(ViewerProfile.CARDOO_VR_GO.halfFovDegrees, far.halfFovDegrees, EPS);
+        assertSame(ViewerProfile.CARDOO_VR_GO, ViewerProfile.fromPreferences("cardoo_vr_go", 0, 0f));
+        // Half-millimeter steps, e.g. the cardoO's focus dial with the lenses closest to the phone
+        assertEquals(0.0375f, ViewerProfile.fromPreferences("none", 60, 37.5f).screenToLensDistance, 1e-7f);
+    }
+
+    @Test
     public void sharpnessSettingIsClampedToTheMaskRange() {
         assertEquals(0f, VrConfig.sharpnessFromPercent(0), EPS);
         assertEquals(0.4f, VrConfig.sharpnessFromPercent(40), EPS);
         assertEquals(1f, VrConfig.sharpnessFromPercent(150), EPS);
         assertEquals(0f, VrConfig.sharpnessFromPercent(-10), EPS);
-        assertEquals(1f, new VrConfig(ViewerProfile.NO_LENS, 90f, 3840, 2160, 5e-5f, 2f).sharpness, EPS);
+        assertEquals(1f, new VrConfig(ViewerProfile.NO_LENS, 90f, 3840, 2160, 5e-5f, 2f, true).sharpness, EPS);
     }
 
     @Test

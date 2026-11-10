@@ -69,6 +69,39 @@ public class HeadPoseTest {
     }
 
     @Test
+    public void recenterWithPitchIsIdentity() {
+        for (double heading : new double[] {0, 37, 90, 180, 271}) {
+            for (double pitch : new double[] {-60, -30, 0, 25, 70}) {
+                float[] r = deviceToWorld(heading, pitch);
+                float[] headToScene = HeadPose.multiply(HeadPose.recenterFrame(r, true), r);
+                assertArrayEquals("heading " + heading + " pitch " + pitch, HeadPose.identity(), headToScene, EPS);
+            }
+        }
+    }
+
+    @Test
+    public void recenterWithPitchKeepsTheScreenUpright() {
+        // The scene's x axis (the screen's horizontal edge) stays level in the world.
+        float[] worldToScene = HeadPose.recenterFrame(deviceToWorld(123, -40), true);
+        assertEquals(0f, worldToScene[2], EPS);
+    }
+
+    @Test
+    public void raisingTheHeadAfterRecenteringLowLooksAboveTheScreen() {
+        float[] world = HeadPose.recenterFrame(deviceToWorld(45, -30), true);
+        float[] fwd = forwardInScene(world, deviceToWorld(45, 0));
+        assertEquals(0f, fwd[0], EPS);
+        assertEquals((float) Math.sin(Math.toRadians(30)), fwd[1], EPS);
+        assertEquals((float) -Math.cos(Math.toRadians(30)), fwd[2], EPS);
+    }
+
+    @Test
+    public void recenterWithPitchWhileLookingStraightDownFacesTheScreen() {
+        float[] r = deviceToWorld(90, -90);
+        assertArrayEquals(new float[] {0, 0, -1}, forwardInScene(HeadPose.recenterFrame(r, true), r), EPS);
+    }
+
+    @Test
     public void columnMajorIsTranspose() {
         float[] m = {1, 2, 3, 4, 5, 6, 7, 8, 9};
         float[] out = new float[9];

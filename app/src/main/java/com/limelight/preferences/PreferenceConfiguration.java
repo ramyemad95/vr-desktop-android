@@ -71,6 +71,9 @@ public class PreferenceConfiguration {
     private static final String VR_REFRESH_RATE_PREF_STRING = "list_vr_refresh_rate";
     private static final String VR_STATS_PANEL_PREF_STRING = "checkbox_vr_stats_panel";
     private static final String VR_SHARPNESS_PREF_STRING = "seekbar_vr_sharpness";
+    private static final String VR_RECENTER_VERTICAL_PREF_STRING = "checkbox_vr_recenter_vertical";
+    private static final String VR_LENS_DISTANCE_PREF_STRING = "list_vr_lens_distance";
+    private static final String VR_SCREEN_DISTANCE_PREF_STRING = "list_vr_screen_distance";
     private static final String FULL_RANGE_PREF_STRING = "checkbox_full_range";
     private static final String GAMEPAD_TOUCHPAD_AS_MOUSE_PREF_STRING = "checkbox_gamepad_touchpad_as_mouse";
     private static final String GAMEPAD_MOTION_SENSORS_PREF_STRING = "checkbox_gamepad_motion_sensors";
@@ -118,6 +121,9 @@ public class PreferenceConfiguration {
     private static final String DEFAULT_VR_REFRESH_RATE = "0"; // Highest the display offers
     private static final boolean DEFAULT_VR_STATS_PANEL = false;
     private static final int DEFAULT_VR_SHARPNESS = 0; // Percent; 0 is off
+    private static final boolean DEFAULT_VR_RECENTER_VERTICAL = true;
+    private static final String DEFAULT_VR_LENS_DISTANCE = "0"; // The viewer's own
+    private static final String DEFAULT_VR_SCREEN_DISTANCE = "0"; // The viewer's own
     private static final boolean DEFAULT_FULL_RANGE = false;
     private static final boolean DEFAULT_GAMEPAD_TOUCHPAD_AS_MOUSE = false;
     private static final boolean DEFAULT_GAMEPAD_MOTION_SENSORS = true;
@@ -156,6 +162,9 @@ public class PreferenceConfiguration {
     public int vrRefreshRate; // Hz, or 0 for the highest the display offers
     public boolean vrStatsPanel;
     public int vrSharpness; // Percent
+    public boolean vrRecenterVertically;
+    public int vrLensDistanceMm; // 0 for the viewer's own
+    public float vrScreenDistanceMm; // 0 for the viewer's own; half-millimeter steps
     public boolean enablePerfOverlay;
     public boolean enableLatencyToast;
     public boolean bindAllUsb;
@@ -629,6 +638,17 @@ public class PreferenceConfiguration {
         config.vrHeadTracking = prefs.getBoolean(VR_HEAD_TRACKING_PREF_STRING, DEFAULT_VR_HEAD_TRACKING);
         config.vrStatsPanel = prefs.getBoolean(VR_STATS_PANEL_PREF_STRING, DEFAULT_VR_STATS_PANEL);
         config.vrSharpness = prefs.getInt(VR_SHARPNESS_PREF_STRING, DEFAULT_VR_SHARPNESS);
+        config.vrRecenterVertically = prefs.getBoolean(VR_RECENTER_VERTICAL_PREF_STRING, DEFAULT_VR_RECENTER_VERTICAL);
+        try {
+            config.vrLensDistanceMm = Integer.parseInt(prefs.getString(VR_LENS_DISTANCE_PREF_STRING, DEFAULT_VR_LENS_DISTANCE));
+        } catch (NumberFormatException e) {
+            config.vrLensDistanceMm = 0;
+        }
+        try {
+            config.vrScreenDistanceMm = Float.parseFloat(prefs.getString(VR_SCREEN_DISTANCE_PREF_STRING, DEFAULT_VR_SCREEN_DISTANCE));
+        } catch (NumberFormatException e) {
+            config.vrScreenDistanceMm = 0;
+        }
         try {
             config.vrRefreshRate = Integer.parseInt(prefs.getString(VR_REFRESH_RATE_PREF_STRING, DEFAULT_VR_REFRESH_RATE));
         } catch (NumberFormatException e) {

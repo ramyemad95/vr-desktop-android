@@ -47,6 +47,30 @@ public class LensDistortionTest {
     }
 
     @Test
+    public void narrowerLensDistanceMovesEachEyesCenterInward() {
+        // With the lenses 60 mm apart, each eye's straight-ahead point is 30 mm from the middle of the screen.
+        int w = 3088, h = 1440;
+        float mpp = VrConfig.knownScreenWidthMeters("SM-S908E") / w;
+        ViewerProfile v = ViewerProfile.NO_LENS.withInterLensDistance(0.060f);
+        // A 3x3 grid: column 2 is the left eye's inner edge (the middle of the phone), row 1 is the lens's height.
+        LensDistortion.EyeMesh left = LensDistortion.buildEyeMesh(LensDistortion.LEFT_EYE, w, h, mpp, v, 3);
+        float innerTan = left.vertices[(1 * 3 + 2) * 4 + 2];
+        assertEquals(0.030f / v.screenToLensDistance, innerTan, 1e-3f);
+    }
+
+    @Test
+    public void fartherScreenMakesEachPixelASmallerAngle() {
+        // The same pixel is seen at angle offset / distance, so moving the screen from 39 to 45 mm shrinks angles.
+        int w = 3088, h = 1440;
+        float mpp = VrConfig.knownScreenWidthMeters("SM-S908E") / w;
+        LensDistortion.EyeMesh near = LensDistortion.buildEyeMesh(LensDistortion.LEFT_EYE, w, h, mpp, ViewerProfile.NO_LENS, 3);
+        LensDistortion.EyeMesh far = LensDistortion.buildEyeMesh(LensDistortion.LEFT_EYE, w, h, mpp,
+                ViewerProfile.NO_LENS.withScreenToLensDistance(0.045f), 3);
+        int innerEdge = (1 * 3 + 2) * 4 + 2;
+        assertEquals(39f / 45f, far.vertices[innerEdge] / near.vertices[innerEdge], 1e-4f);
+    }
+
+    @Test
     public void noLensIsIdentity() {
         assertEquals(0.7f, LensDistortion.undistort(0.7f, 0f, 0f), EPS);
     }

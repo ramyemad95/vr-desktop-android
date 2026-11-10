@@ -314,6 +314,11 @@
     <string name="vr_viewer_cardboard_v1">Cardboard v1 (2014)</string>
     <string name="vr_viewer_cardoo_vr_go">cardoO VR Go (turn its IPD dial until the image is single)</string>
     <string name="vr_viewer_none">No lens correction</string>
+    <string name="title_list_vr_lens_distance">Lens distance (IPD)</string>
+    <string name="summary_list_vr_lens_distance">For viewers with an IPD dial: set the distance between the lenses. If the image doubles or won\'t come into focus after you turn the dial, the app\'s lens distance doesn\'t match it. cardoO VR Go: 60 mm with the lenses at their closest, 70 mm at their widest.</string>
+    <string name="vr_lens_distance_default">The viewer\'s own</string>
+    <string name="title_list_vr_screen_distance">Screen to lens distance (focus)</string>
+    <string name="summary_list_vr_screen_distance">For viewers with a focus dial. Turn the dial until text is sharp, then pick the value here at which the screen stays still when you turn your head: if it drifts the way you turn, pick a bigger number; if it drifts the other way, a smaller one. Judge it on the middle of the screen. cardoO VR Go: about 37.5 mm with the lenses closest to the phone, 46.5 mm farthest.</string>
     <string name="title_seekbar_vr_screen_size">Virtual screen size</string>
     <string name="summary_seekbar_vr_screen_size">How wide the PC screen looks, in degrees of your view. Bigger makes text easier to read; smaller fits the whole screen in view.</string>
     <string name="suffix_seekbar_vr_screen_size">°</string>
@@ -323,6 +328,8 @@
     <string name="suffix_seekbar_vr_sharpness" formatted="false">%</string>
     <string name="title_checkbox_vr_head_tracking">Head tracking</string>
     <string name="summary_checkbox_vr_head_tracking">Keep the virtual screen in place when you turn your head. Turn off to keep the screen fixed in front of your eyes.</string>
+    <string name="title_checkbox_vr_recenter_vertical">Re-center up and down too</string>
+    <string name="summary_checkbox_vr_recenter_vertical">A tap puts the screen where you\'re looking, higher or lower too (for example when you lean back). Off keeps it at eye level and only turns it left or right.</string>
     <string name="title_list_vr_refresh_rate">Refresh rate</string>
     <string name="summary_list_vr_refresh_rate">How often the view is redrawn. Higher is smoother when you turn your head; lower saves battery and heat. Above 60 Hz on Samsung phones needs Settings → Display → Motion smoothness → Adaptive.</string>
     <string name="vr_refresh_rate_highest">Highest available</string>

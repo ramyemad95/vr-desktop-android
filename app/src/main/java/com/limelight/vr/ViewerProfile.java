@@ -47,6 +47,25 @@ public final class ViewerProfile {
      */
     public static final ViewerProfile CARDOO_VR_GO = new ViewerProfile(0.064f, 0.042f, 0.34f, 0.55f, 50f);
 
+    /**
+     * The same viewer with its lenses {@code meters} apart, for viewers with an IPD dial. The app draws each eye's
+     * image centered on its lens, so this has to match the dial: off by 2 mm per eye, the eyes would have to turn
+     * outward to merge the images, which they can't. Also sets the distance between the virtual eyes.
+     */
+    public ViewerProfile withInterLensDistance(float meters) {
+        return new ViewerProfile(meters, screenToLensDistance, k1, k2, halfFovDegrees);
+    }
+
+    /**
+     * The same viewer with the screen {@code meters} from the lenses, for viewers with a focus dial. The app turns a
+     * point on the phone into a viewing angle with this distance, so if it's off, the picture is drawn too big or too
+     * small for the lens and the screen drifts with or against the head when turning. The blur itself is optical:
+     * only the dial fixes that.
+     */
+    public ViewerProfile withScreenToLensDistance(float meters) {
+        return new ViewerProfile(interLensDistance, meters, k1, k2, halfFovDegrees);
+    }
+
     /** Maps the value stored by the "VR viewer" setting to a profile. Unknown values fall back to Cardboard v2. */
     public static ViewerProfile fromPreference(String value) {
         if ("cardboard_v1".equals(value)) {
@@ -59,5 +78,33 @@ public final class ViewerProfile {
             return NO_LENS;
         }
         return CARDBOARD_V2;
+    }
+
+    /**
+     * The viewer from the "VR viewer" setting, with the "Lens distance" setting applied.
+     *
+     * @param lensDistanceMm the lens distance in millimeters, or 0 to keep the viewer's own
+     */
+    public static ViewerProfile fromPreferences(String viewer, int lensDistanceMm) {
+        return fromPreferences(viewer, lensDistanceMm, 0);
+    }
+
+    /**
+     * The viewer from the "VR viewer" setting, with the "Lens distance" and "Screen to lens distance" settings
+     * applied.
+     *
+     * @param lensDistanceMm   the lens distance in millimeters, or 0 to keep the viewer's own
+     * @param screenDistanceMm the screen-to-lens distance in millimeters (half-millimeter steps), or 0 to keep the
+     *                         viewer's own
+     */
+    public static ViewerProfile fromPreferences(String viewer, int lensDistanceMm, float screenDistanceMm) {
+        ViewerProfile profile = fromPreference(viewer);
+        if (lensDistanceMm > 0) {
+            profile = profile.withInterLensDistance(lensDistanceMm / 1000f);
+        }
+        if (screenDistanceMm > 0) {
+            profile = profile.withScreenToLensDistance(screenDistanceMm / 1000f);
+        }
+        return profile;
     }
 }

@@ -212,7 +212,10 @@ final class VrRenderer implements GLSurfaceView.Renderer, SurfaceTexture.OnFrame
         displayRotation = rotation;
     }
 
-    /** Puts the virtual screen straight ahead of where the user is looking now, level with the horizon. */
+    /**
+     * Puts the virtual screen straight ahead of where the user is looking now: level with the horizon, or also up or
+     * down when {@link VrConfig#recenterVertically} is set.
+     */
     void requestRecenter() {
         recenterRequested = true;
     }
@@ -444,7 +447,7 @@ final class VrRenderer implements GLSurfaceView.Renderer, SurfaceTexture.OnFrame
         }
         if (recenterRequested) {
             recenterRequested = false;
-            worldToScene = HeadPose.recenterFrame(deviceToWorld);
+            worldToScene = HeadPose.recenterFrame(deviceToWorld, config.recenterVertically);
         }
         HeadPose.multiply(worldToScene, deviceToWorld, headToScene);
     }

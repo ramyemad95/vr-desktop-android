@@ -554,11 +554,12 @@ public class Game extends Activity implements SurfaceHolder.Callback,
         // computed against the real display size
         DisplayMetrics metrics = new DisplayMetrics();
         getWindowManager().getDefaultDisplay().getRealMetrics(metrics);
-        VrConfig vrConfig = new VrConfig(ViewerProfile.fromPreference(prefConfig.vrViewer),
+        VrConfig vrConfig = new VrConfig(ViewerProfile.fromPreferences(prefConfig.vrViewer, prefConfig.vrLensDistanceMm,
+                        prefConfig.vrScreenDistanceMm),
                 prefConfig.vrScreenSizeDegrees, prefConfig.width, prefConfig.height,
                 VrConfig.metersPerPixel(Build.MODEL, Math.max(metrics.widthPixels, metrics.heightPixels),
                         metrics.xdpi, metrics.ydpi, metrics.densityDpi),
-                VrConfig.sharpnessFromPercent(prefConfig.vrSharpness));
+                VrConfig.sharpnessFromPercent(prefConfig.vrSharpness), prefConfig.vrRecenterVertically);
 
         vrView = new VrStreamView(this);
         // Draw above the StreamView's (unused) surface but below the overlays
