@@ -323,7 +323,10 @@ public class MediaCodecDecoderRenderer extends VideoDecoderRenderer implements C
         int avcOptimalSlicesPerFrame = 0;
         int hevcOptimalSlicesPerFrame = 0;
         if (avcDecoder != null) {
-            directSubmit = MediaCodecHelper.decoderCanDirectSubmit(avcDecoder.getName());
+            // Not in VR mode: with direct submit, the thread that reads video packets from the network also
+            // waits for the decoder to accept each frame, so a decoder slowed by heat stops the socket from being
+            // drained and whole bursts of frames are lost. A separate decoder thread costs about a millisecond.
+            directSubmit = !prefs.vrMode && MediaCodecHelper.decoderCanDirectSubmit(avcDecoder.getName());
             refFrameInvalidationAvc = MediaCodecHelper.decoderSupportsRefFrameInvalidationAvc(avcDecoder.getName(), prefs.height);
             avcOptimalSlicesPerFrame = MediaCodecHelper.getDecoderOptimalSlicesPerFrame(avcDecoder.getName());
 

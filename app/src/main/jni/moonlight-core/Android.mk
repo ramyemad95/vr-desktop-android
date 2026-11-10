@@ -52,7 +52,10 @@ LOCAL_C_INCLUDES := $(LOCAL_PATH)/moonlight-common-c/enet/include \
 
 LOCAL_CFLAGS := -DHAS_SOCKLEN_T=1 -DLC_ANDROID -DHAVE_CLOCK_GETTIME=1
 
-ifeq ($(NDK_DEBUG),1)
+# LC_DEBUG turns on moonlight-common-c's FEC validation mode, which drops and Reed-Solomon-recovers a packet in
+# every frame on the network thread and waits for one extra packet per FEC block. Debug builds no longer get it
+# automatically (VR Desktop is tested on phones with debug builds); pass LC_DEBUG_BUILD=1 to ndk-build to enable it.
+ifeq ($(LC_DEBUG_BUILD),1)
 LOCAL_CFLAGS += -DLC_DEBUG
 endif
 
