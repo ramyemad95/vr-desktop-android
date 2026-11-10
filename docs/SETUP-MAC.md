@@ -65,6 +65,7 @@ The Windows PC runs Sunshine, set up by the VR Desktop Host app from
   - **VR viewer:** if straight lines look bent, try another lens type. For the **cardoO VR Go**, pick that entry,
     center the phone on the line between the eyes, turn the IPD dial until the image is single, then the focus
     dial until text is sharp.
+  - **Sharpness:** off by default. 30–50% makes text crisper through the lenses; too much adds halos.
   - **Head tracking:** on by default. Turn it off to keep the screen fixed in front of your eyes.
   - **Refresh rate:** "Highest available" by default (120 Hz). Pick 60 Hz to save battery and heat. Anything above
     60 Hz needs Motion smoothness set to Adaptive; if it isn't, the app shows a message and runs at 60 Hz.

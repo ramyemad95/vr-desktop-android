@@ -9,13 +9,22 @@ public final class VrConfig {
     public final int videoWidth, videoHeight;
     /** Physical size of one phone screen pixel. */
     public final float metersPerPixel;
+    /** Strength of the unsharp mask on the video, 0 (off) to 1. */
+    public final float sharpness;
 
-    public VrConfig(ViewerProfile viewer, float screenWidthDegrees, int videoWidth, int videoHeight, float metersPerPixel) {
+    public VrConfig(ViewerProfile viewer, float screenWidthDegrees, int videoWidth, int videoHeight, float metersPerPixel,
+                    float sharpness) {
         this.viewer = viewer;
         this.screenWidthDegrees = screenWidthDegrees;
         this.videoWidth = videoWidth;
         this.videoHeight = videoHeight;
         this.metersPerPixel = metersPerPixel;
+        this.sharpness = Math.max(0f, Math.min(1f, sharpness));
+    }
+
+    /** The "Sharpness" setting, in percent, as an unsharp-mask strength. */
+    public static float sharpnessFromPercent(int percent) {
+        return Math.max(0, Math.min(100, percent)) / 100f;
     }
 
     private static final float METERS_PER_INCH = 0.0254f;

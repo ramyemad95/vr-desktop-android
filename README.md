@@ -21,8 +21,8 @@ adds:
   [docs/VR-RENDERER.md](docs/VR-RENDERER.md).
 - **Head tracking** from the phone's rotation sensor. Tap the screen, or press the viewer's button, to bring the
   virtual screen back in front of you.
-- **Settings → VR Settings**: VR mode on/off, the viewer's lens type, the virtual screen size, head tracking
-  on/off, the refresh rate, and a stats panel (network status, PC encode and phone decode times) below the
+- **Settings → VR Settings**: VR mode on/off, the viewer's lens type, the virtual screen size, sharpness, head
+  tracking on/off, the refresh rate, and a stats panel (network status, PC encode and phone decode times) below the
   virtual screen.
 - **Its own app ID** (`io.github.ramyemad95.vrdesktop`) and name, so it installs next to the real Moonlight.
 

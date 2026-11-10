@@ -18,8 +18,13 @@ Code: [`app/src/main/java/com/limelight/vr/`](../app/src/main/java/com/limelight
    "render each eye to a buffer, then distort the buffer" approach, which resamples twice.
 4. **Anti-aliasing:** the desktop usually has more pixels than the eye can see (for example, 1920 desktop pixels
    across about 900 eye pixels). Decoder textures can't have mipmaps, so where the image is shrunk, the shader
-   averages 4 taps inside each pixel's footprint. Where it's magnified, it takes 1 tap. The screen's edges are
+   averages 4 taps inside each pixel's footprint, and a 3×3 box of 9 taps above 2 desktop pixels per eye pixel
+   (a 4K stream on a 90–100° screen is 2.1–2.5). Where it's magnified, it takes 1 tap. The screen's edges are
    anti-aliased too.
+5. **Sharpening:** VR Settings → Sharpness (0–100%, off by default) adds an unsharp mask at the scale of one
+   phone pixel, against a 4-tap blur on the diagonals, to make up for the lens's and the downscale's softening.
+   On a Galaxy S22 Ultra at 120 Hz with a 4K stream, 9 taps plus sharpening hold 120 fps with no late frames
+   (GPU about 75% busy at 421 of 818 MHz).
 
 ## Lens model (`LensDistortion`, `ViewerProfile`)
 This is Cardboard's viewer-profile model: `eye = screen · (1 + k1·r² + k2·r⁴)`, where both values are tangents

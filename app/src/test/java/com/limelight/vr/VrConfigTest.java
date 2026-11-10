@@ -9,6 +9,15 @@ public class VrConfigTest {
     private static final float EPS = 1e-9f;
 
     @Test
+    public void sharpnessSettingIsClampedToTheMaskRange() {
+        assertEquals(0f, VrConfig.sharpnessFromPercent(0), EPS);
+        assertEquals(0.4f, VrConfig.sharpnessFromPercent(40), EPS);
+        assertEquals(1f, VrConfig.sharpnessFromPercent(150), EPS);
+        assertEquals(0f, VrConfig.sharpnessFromPercent(-10), EPS);
+        assertEquals(1f, new VrConfig(ViewerProfile.NO_LENS, 90f, 3840, 2160, 5e-5f, 2f).sharpness, EPS);
+    }
+
+    @Test
     public void usesMeasuredDensityWhenPlausible() {
         assertEquals(0.0254f / 500f, VrConfig.metersPerPixel(499f, 501f, 450), EPS);
     }

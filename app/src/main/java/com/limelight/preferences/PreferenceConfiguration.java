@@ -70,6 +70,7 @@ public class PreferenceConfiguration {
     private static final String VR_HEAD_TRACKING_PREF_STRING = "checkbox_vr_head_tracking";
     private static final String VR_REFRESH_RATE_PREF_STRING = "list_vr_refresh_rate";
     private static final String VR_STATS_PANEL_PREF_STRING = "checkbox_vr_stats_panel";
+    private static final String VR_SHARPNESS_PREF_STRING = "seekbar_vr_sharpness";
     private static final String FULL_RANGE_PREF_STRING = "checkbox_full_range";
     private static final String GAMEPAD_TOUCHPAD_AS_MOUSE_PREF_STRING = "checkbox_gamepad_touchpad_as_mouse";
     private static final String GAMEPAD_MOTION_SENSORS_PREF_STRING = "checkbox_gamepad_motion_sensors";
@@ -116,6 +117,7 @@ public class PreferenceConfiguration {
     private static final boolean DEFAULT_VR_HEAD_TRACKING = true;
     private static final String DEFAULT_VR_REFRESH_RATE = "0"; // Highest the display offers
     private static final boolean DEFAULT_VR_STATS_PANEL = false;
+    private static final int DEFAULT_VR_SHARPNESS = 0; // Percent; 0 is off
     private static final boolean DEFAULT_FULL_RANGE = false;
     private static final boolean DEFAULT_GAMEPAD_TOUCHPAD_AS_MOUSE = false;
     private static final boolean DEFAULT_GAMEPAD_MOTION_SENSORS = true;
@@ -153,6 +155,7 @@ public class PreferenceConfiguration {
     public boolean vrHeadTracking;
     public int vrRefreshRate; // Hz, or 0 for the highest the display offers
     public boolean vrStatsPanel;
+    public int vrSharpness; // Percent
     public boolean enablePerfOverlay;
     public boolean enableLatencyToast;
     public boolean bindAllUsb;
@@ -625,6 +628,7 @@ public class PreferenceConfiguration {
         config.vrScreenSizeDegrees = prefs.getInt(VR_SCREEN_SIZE_PREF_STRING, DEFAULT_VR_SCREEN_SIZE);
         config.vrHeadTracking = prefs.getBoolean(VR_HEAD_TRACKING_PREF_STRING, DEFAULT_VR_HEAD_TRACKING);
         config.vrStatsPanel = prefs.getBoolean(VR_STATS_PANEL_PREF_STRING, DEFAULT_VR_STATS_PANEL);
+        config.vrSharpness = prefs.getInt(VR_SHARPNESS_PREF_STRING, DEFAULT_VR_SHARPNESS);
         try {
             config.vrRefreshRate = Integer.parseInt(prefs.getString(VR_REFRESH_RATE_PREF_STRING, DEFAULT_VR_REFRESH_RATE));
         } catch (NumberFormatException e) {

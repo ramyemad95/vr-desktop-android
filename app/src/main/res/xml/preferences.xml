@@ -27,6 +27,16 @@
             android:summary="@string/summary_seekbar_vr_screen_size"
             android:text="@string/suffix_seekbar_vr_screen_size"
             android:title="@string/title_seekbar_vr_screen_size" />
+        <com.limelight.preferences.SeekBarPreference
+            android:key="seekbar_vr_sharpness"
+            android:dependency="checkbox_vr_mode"
+            android:defaultValue="0"
+            seekbar:min="0"
+            android:max="100"
+            seekbar:step="10"
+            android:summary="@string/summary_seekbar_vr_sharpness"
+            android:text="@string/suffix_seekbar_vr_sharpness"
+            android:title="@string/title_seekbar_vr_sharpness" />
         <CheckBoxPreference
             android:key="checkbox_vr_head_tracking"
             android:dependency="checkbox_vr_mode"

@@ -557,7 +557,8 @@ public class Game extends Activity implements SurfaceHolder.Callback,
         VrConfig vrConfig = new VrConfig(ViewerProfile.fromPreference(prefConfig.vrViewer),
                 prefConfig.vrScreenSizeDegrees, prefConfig.width, prefConfig.height,
                 VrConfig.metersPerPixel(Build.MODEL, Math.max(metrics.widthPixels, metrics.heightPixels),
-                        metrics.xdpi, metrics.ydpi, metrics.densityDpi));
+                        metrics.xdpi, metrics.ydpi, metrics.densityDpi),
+                VrConfig.sharpnessFromPercent(prefConfig.vrSharpness));
 
         vrView = new VrStreamView(this);
         // Draw above the StreamView's (unused) surface but below the overlays

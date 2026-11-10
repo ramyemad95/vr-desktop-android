@@ -64,6 +64,7 @@ final class VrRenderer implements GLSurfaceView.Renderer, SurfaceTexture.OnFrame
             "uniform float uMaxTan2;\n" +
             "uniform float uHasFrame;\n" +
             "uniform vec2 uVideoSize;\n" +
+            "uniform float uSharpness;\n" +
             "uniform sampler2D uPanelTex;\n" +
             "uniform float uPanel;\n" +
             "uniform vec2 uPanelCenter;\n" +
@@ -103,13 +104,33 @@ final class VrRenderer implements GLSurfaceView.Renderer, SurfaceTexture.OnFrame
             // average 4 taps on a rotated grid inside the pixel's footprint to avoid shimmering text. Where the
             // desktop is magnified, one bilinear tap is enough and saves GPU time.
             "            vec2 texels = footprint * uVideoSize;\n" +
-            "            if (max(texels.x, texels.y) > 1.0) {\n" +
+            "            float density = max(texels.x, texels.y);\n" +
+            // Above 2 desktop pixels per phone pixel (a 4K stream on a 90-100 degree screen), 4 taps leave gaps
+            // between them and text shimmers; a 3x3 box covers the whole footprint.
+            "            if (density > 2.0) {\n" +
+            "                screen = vec3(0.0);\n" +
+            "                for (int i = -1; i <= 1; i++) {\n" +
+            "                    for (int j = -1; j <= 1; j++) {\n" +
+            "                        screen += sampleVideo(uv + (float(i) * dx + float(j) * dy) / 3.0);\n" +
+            "                    }\n" +
+            "                }\n" +
+            "                screen /= 9.0;\n" +
+            "            } else if (density > 1.0) {\n" +
             "                screen = 0.25 * (sampleVideo(uv + 0.125 * dx + 0.375 * dy) +\n" +
             "                                 sampleVideo(uv + 0.375 * dx - 0.125 * dy) +\n" +
             "                                 sampleVideo(uv - 0.125 * dx - 0.375 * dy) +\n" +
             "                                 sampleVideo(uv - 0.375 * dx + 0.125 * dy));\n" +
             "            } else {\n" +
             "                screen = sampleVideo(uv);\n" +
+            "            }\n" +
+            // Unsharp mask at the scale of one phone pixel: the lens and the downscale both soften text. The
+            // blur is 4 taps one pixel away on the diagonals.
+            "            if (uSharpness > 0.0) {\n" +
+            "                vec2 ax = 0.7 * dx;\n" +
+            "                vec2 ay = 0.7 * dy;\n" +
+            "                vec3 wide = 0.25 * (sampleVideo(uv + ax + ay) + sampleVideo(uv + ax - ay) +\n" +
+            "                                    sampleVideo(uv - ax + ay) + sampleVideo(uv - ax - ay));\n" +
+            "                screen = clamp(screen + uSharpness * (screen - wide), 0.0, 1.0);\n" +
             "            }\n" +
             "#else\n" +
             "            screen = sampleVideo(uv);\n" +
@@ -139,6 +160,7 @@ final class VrRenderer implements GLSurfaceView.Renderer, SurfaceTexture.OnFrame
     private int program;
     private int aPosition, aTan;
     private int uVideo, uTexMatrix, uEyeToScene, uEyePos, uScreenHalfSize, uScreenDistance, uMaxTan2, uHasFrame, uVideoSize;
+    private int uSharpness;
     private int videoTexture;
     private SurfaceTexture surfaceTexture;
     private Surface videoSurface;
@@ -230,7 +252,8 @@ final class VrRenderer implements GLSurfaceView.Renderer, SurfaceTexture.OnFrame
         uMaxTan2 = GLES20.glGetUniformLocation(program, "uMaxTan2");
         uHasFrame = GLES20.glGetUniformLocation(program, "uHasFrame");
         uVideoSize = GLES20.glGetUniformLocation(program, "uVideoSize");
-        uPanelTex = GLES20.glGetUniformLocation(program, "uPanelTex");
+        uSharpness = GLES20.glGetUniformLocation(program, "uSharpness");
+        uPanelTex =GLES20.glGetUniformLocation(program, "uPanelTex");
         uPanel = GLES20.glGetUniformLocation(program, "uPanel");
         uPanelCenter = GLES20.glGetUniformLocation(program, "uPanelCenter");
         uPanelHalfSize = GLES20.glGetUniformLocation(program, "uPanelHalfSize");
@@ -324,6 +347,7 @@ final class VrRenderer implements GLSurfaceView.Renderer, SurfaceTexture.OnFrame
         GLES20.glUniform1f(uMaxTan2, maxTan * maxTan);
         GLES20.glUniform1f(uHasFrame, hasFrame ? 1f : 0f);
         GLES20.glUniform2f(uVideoSize, config.videoWidth, config.videoHeight);
+        GLES20.glUniform1f(uSharpness, config.sharpness);
         // The panel's sampler always points at unit 1, even when unused: GLES 2 rejects a draw where samplers of
         // different types (here the external video on unit 0) share a unit.
         GLES20.glUniform1i(uPanelTex, 1);
