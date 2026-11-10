@@ -61,6 +61,11 @@ The Windows PC runs Sunshine, set up by the VR Desktop Host app from
 - Put the phone in the viewer and tap the screen (or press the viewer's button) to bring the virtual screen in front
   of you. Do this again any time it drifts.
 - In the phone's VR Desktop **Settings → VR Settings**:
+  - **Resolution: match the PC:** on by default. With the VR Desktop Host app running on the PC, the stream uses
+    the PC screen's current resolution: a fullscreen game at 1080p streams at 1080p (about 50 Mbps), the desktop
+    at 4K (about 100 Mbps). When a game switches resolution and stays there for 3 seconds, the stream reconnects
+    at the new one, with a second or two of black. Borderless games keep the desktop's resolution. Without the host
+    app, the Resolution and Bitrate settings apply.
   - **Virtual screen size:** 70° is the default. Go bigger to read small text, smaller to see the whole screen at once.
   - **VR viewer:** if straight lines look bent, try another lens type. For the **cardoO VR Go**, pick that entry,
     center the phone on the line between the eyes, turn the IPD dial until the image is single, then the focus

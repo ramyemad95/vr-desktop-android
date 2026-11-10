@@ -308,6 +308,8 @@
     <string name="category_vr_settings">VR Settings</string>
     <string name="title_checkbox_vr_mode">VR mode</string>
     <string name="summary_checkbox_vr_mode">Show the PC screen as a virtual screen for a phone VR viewer (Cardboard). Tap the screen, or press the viewer\'s button, to bring the screen back in front of you.</string>
+    <string name="title_checkbox_vr_match_pc_resolution">Resolution: match the PC</string>
+    <string name="summary_checkbox_vr_match_pc_resolution">Stream at the resolution the PC\'s screen is in, so a fullscreen game at 1080p is streamed at 1080p instead of being enlarged to 4K. The bitrate follows: 1080p about 50, 1440p about 80, 4K about 100 Mbps. When a game changes resolution, the stream reconnects for a second or two. Needs the VR Desktop Host app on the PC; without it, the Resolution and Bitrate settings apply.</string>
     <string name="title_list_vr_viewer">VR viewer</string>
     <string name="summary_list_vr_viewer">The lens type of the headset the phone sits in</string>
     <string name="vr_viewer_cardboard_v2">Cardboard v2 and most plastic viewers</string>

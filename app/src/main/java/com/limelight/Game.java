@@ -36,6 +36,9 @@ import com.limelight.utils.ServerHelper;
 import com.limelight.utils.ShortcutHelper;
 import com.limelight.utils.SpinnerDialog;
 import com.limelight.utils.UiHelper;
+import com.limelight.vr.ModeFollower;
+import com.limelight.vr.PcDisplayMode;
+import com.limelight.vr.PcModeClient;
 import com.limelight.vr.VrConfig;
 import com.limelight.vr.VrStats;
 import com.limelight.vr.VrStreamView;
@@ -63,6 +66,8 @@ import android.net.wifi.WifiManager;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
+import android.os.Looper;
+import android.os.SystemClock;
 import android.os.IBinder;
 import android.util.DisplayMetrics;
 import android.util.Rational;
@@ -91,6 +96,10 @@ import java.security.cert.CertificateException;
 import java.security.cert.CertificateFactory;
 import java.security.cert.X509Certificate;
 import java.util.Locale;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 
 
 public class Game extends Activity implements SurfaceHolder.Callback,
@@ -144,6 +153,14 @@ public class Game extends Activity implements SurfaceHolder.Callback,
     private StreamView streamView;
     // Non-null in VR mode, where it replaces the StreamView as the video output
     private VrStreamView vrView;
+    // VR "Resolution: match the PC": the host app's display mode, and the follower that restarts the stream when a
+    // game changes it (main thread, except the client's watcher)
+    private PcModeClient pcModeClient;
+    private PcDisplayMode streamPcMode;
+    private ModeFollower modeFollower;
+    private boolean restartingForPcMode;
+    private final Handler pcModeHandler = new Handler(Looper.getMainLooper());
+    private final Runnable pcModeCheck = this::checkPcModeChange;
     private long lastAbsTouchUpTime = 0;
     private long lastAbsTouchDownTime = 0;
     private float lastAbsTouchUpX, lastAbsTouchUpY;
@@ -225,6 +242,11 @@ public class Game extends Activity implements SurfaceHolder.Callback,
         // Read the stream preferences
         prefConfig = PreferenceConfiguration.readPreferences(this);
         tombstonePrefs = Game.this.getSharedPreferences("DecoderTombstone", 0);
+
+        // VR: stream at the resolution the PC's display is in, before anything below reads it
+        if (prefConfig.vrMode && prefConfig.vrMatchPcResolution) {
+            matchPcDisplayMode();
+        }
 
         // Enter landscape unless we're on a square screen
         setPreferredOrientationForCurrentDisplay();
@@ -546,6 +568,94 @@ public class Game extends Activity implements SurfaceHolder.Callback,
         else {
             // The connection will be started when the surface gets created
             streamView.getHolder().addCallback(this);
+        }
+    }
+
+    /**
+     * VR "Resolution: match the PC": asks the VR Desktop Host app for the PC display's mode and streams at that
+     * resolution, with a bitrate to match. A game in exclusive fullscreen at 1080p is then streamed at 1080p instead
+     * of being upscaled to the desktop's 4K. Without the host app this fails within about a second and the
+     * Resolution and Bitrate settings apply.
+     */
+    private void matchPcDisplayMode() {
+        String host = getIntent().getStringExtra(EXTRA_HOST);
+        if (host == null) {
+            return;
+        }
+        PcModeClient client = new PcModeClient(host);
+        // The decoder, the VR view and the stream are all set up from prefConfig right after this, so the answer is
+        // needed now. It comes from the LAN, so the wait is short; the spinner is already showing.
+        ExecutorService executor = Executors.newSingleThreadExecutor();
+        Future<PcDisplayMode> answer = executor.submit(() -> client.fetch(400, 800));
+        PcDisplayMode mode = null;
+        try {
+            mode = answer.get(1500, TimeUnit.MILLISECONDS);
+        } catch (Exception e) {
+            answer.cancel(true);
+        }
+        executor.shutdownNow();
+        if (mode == null) {
+            LimeLog.info("VR: the PC doesn't report its display mode; streaming " + prefConfig.width + "x" +
+                    prefConfig.height + " from the settings");
+            return;
+        }
+        pcModeClient = client;
+        streamPcMode = mode;
+        if (!mode.isStreamable()) {
+            LimeLog.info("VR: the PC's display " + mode + " can't be streamed as is; streaming " + prefConfig.width +
+                    "x" + prefConfig.height + " from the settings");
+            return;
+        }
+        prefConfig.width = mode.width;
+        prefConfig.height = mode.height;
+        prefConfig.bitrate = PcDisplayMode.bitrateKbps(mode.width, mode.height, prefConfig.fps);
+        LimeLog.info("VR: matching the PC's display " + mode + ": streaming " + prefConfig.width + "x" +
+                prefConfig.height + " at " + (prefConfig.bitrate / 1000) + " Mbps");
+    }
+
+    /** Once the stream is up, follows the PC's display mode and restarts the stream when a game changes it. */
+    private void startFollowingPcMode() {
+        if (pcModeClient == null || streamPcMode == null || modeFollower != null) {
+            return;
+        }
+        modeFollower = new ModeFollower(prefConfig.width, prefConfig.height);
+        pcModeClient.startWatching(streamPcMode.seq, mode -> pcModeHandler.post(() -> onPcModeReport(mode)));
+    }
+
+    private void onPcModeReport(PcDisplayMode mode) {
+        if (modeFollower == null || restartingForPcMode) {
+            return;
+        }
+        modeFollower.onMode(mode, SystemClock.uptimeMillis());
+        pcModeHandler.removeCallbacks(pcModeCheck);
+        long checkAt = modeFollower.nextCheckAt();
+        if (checkAt >= 0) {
+            pcModeHandler.postAtTime(pcModeCheck, checkAt);
+        }
+    }
+
+    private void checkPcModeChange() {
+        if (modeFollower == null || restartingForPcMode || isFinishing() ||
+                !modeFollower.shouldRestart(SystemClock.uptimeMillis())) {
+            return;
+        }
+        restartingForPcMode = true;
+        LimeLog.info("VR: the PC's display changed to " + modeFollower.candidateWidth() + "x" +
+                modeFollower.candidateHeight() + "; reconnecting at that resolution");
+        // A new Game asks for the mode again and resumes the session at the new resolution. moonlight-common holds a
+        // new connection until this one has finished stopping.
+        Intent restart = new Intent(getIntent());
+        stopConnection();
+        finish();
+        startActivity(restart);
+        overridePendingTransition(0, 0);
+    }
+
+    private void stopFollowingPcMode() {
+        pcModeHandler.removeCallbacks(pcModeCheck);
+        modeFollower = null;
+        if (pcModeClient != null) {
+            pcModeClient.stop();
         }
     }
 
@@ -1094,6 +1204,8 @@ public class Game extends Activity implements SurfaceHolder.Callback,
     @Override
     protected void onDestroy() {
         super.onDestroy();
+
+        stopFollowingPcMode();
 
         if (controllerHandler != null) {
             controllerHandler.destroy();
@@ -2298,6 +2410,7 @@ public class Game extends Activity implements SurfaceHolder.Callback,
     }
 
     private void stopConnection() {
+        stopFollowingPcMode();
         if (connecting || connected) {
             connecting = connected = false;
             updatePipAutoEnter();
@@ -2491,6 +2604,8 @@ public class Game extends Activity implements SurfaceHolder.Callback,
                 connected = true;
                 connecting = false;
                 updatePipAutoEnter();
+
+                startFollowingPcMode();
 
                 // Hide the mouse cursor now after a short delay.
                 // Doing it before dismissing the spinner seems to be undone

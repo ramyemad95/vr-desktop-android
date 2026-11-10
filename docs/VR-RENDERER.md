@@ -92,8 +92,16 @@ can be read from a viewer's Cardboard QR profile and added as a new preset later
 - In VR mode, `Game` adds a `VrStreamView` above the `StreamView`. The `StreamView` stays underneath and keeps
   keyboard and mouse focus. The connection starts when the VR texture's surface exists, and stops when it goes
   away, the same way Moonlight treats its own surface.
-- Turned off in VR mode: HDR (the renderer is SDR), picture-in-picture, the on-screen controller, and touch input
-  to the PC (a tap re-centers instead).
+- Turned off in VR mode: picture-in-picture, the on-screen controller, and touch input to the PC (a tap
+  re-centers instead). HDR stays on and is tone-mapped by the renderer.
+- **Resolution: match the PC** (`PcModeClient`, `PcDisplayMode`, `ModeFollower`): before anything reads the
+  stream settings, `Game.onCreate` asks the VR Desktop Host app for the display mode (`GET :48100/vr/v1/mode`,
+  docs/PROTOCOL.md v1; 400 ms connect timeout, at most 1.5 s in all) and, if it's streamable (even, landscape, up
+  to 4096×2304), replaces the resolution and bitrate (1080p 50, 1440p 80, 4K 100 Mbps at 60 fps, scaled by fps,
+  capped at 150). Once connected, a thread long-polls `?after=<seq>`; `ModeFollower` restarts the stream when a
+  new resolution has held for 3 s and isn't the stream's own (a match → menu → match cycle doesn't reconnect).
+  The restart stops the connection, finishes `Game` and starts it again with the same intent; moonlight-common
+  holds the new connection until the old one has stopped, and Sunshine resumes the session at the new size.
 
 ## Galaxy S22 Ultra notes
 - **Screen resolution:** set **WQHD+** (Settings → Display → Screen resolution). Each eye then gets 1544×1440

@@ -74,6 +74,7 @@ public class PreferenceConfiguration {
     private static final String VR_RECENTER_VERTICAL_PREF_STRING = "checkbox_vr_recenter_vertical";
     private static final String VR_LENS_DISTANCE_PREF_STRING = "list_vr_lens_distance";
     private static final String VR_SCREEN_DISTANCE_PREF_STRING = "list_vr_screen_distance";
+    private static final String VR_MATCH_PC_RESOLUTION_PREF_STRING = "checkbox_vr_match_pc_resolution";
     private static final String FULL_RANGE_PREF_STRING = "checkbox_full_range";
     private static final String GAMEPAD_TOUCHPAD_AS_MOUSE_PREF_STRING = "checkbox_gamepad_touchpad_as_mouse";
     private static final String GAMEPAD_MOTION_SENSORS_PREF_STRING = "checkbox_gamepad_motion_sensors";
@@ -124,6 +125,7 @@ public class PreferenceConfiguration {
     private static final boolean DEFAULT_VR_RECENTER_VERTICAL = true;
     private static final String DEFAULT_VR_LENS_DISTANCE = "0"; // The viewer's own
     private static final String DEFAULT_VR_SCREEN_DISTANCE = "0"; // The viewer's own
+    private static final boolean DEFAULT_VR_MATCH_PC_RESOLUTION = true;
     private static final boolean DEFAULT_FULL_RANGE = false;
     private static final boolean DEFAULT_GAMEPAD_TOUCHPAD_AS_MOUSE = false;
     private static final boolean DEFAULT_GAMEPAD_MOTION_SENSORS = true;
@@ -165,6 +167,7 @@ public class PreferenceConfiguration {
     public boolean vrRecenterVertically;
     public int vrLensDistanceMm; // 0 for the viewer's own
     public float vrScreenDistanceMm; // 0 for the viewer's own; half-millimeter steps
+    public boolean vrMatchPcResolution;
     public boolean enablePerfOverlay;
     public boolean enableLatencyToast;
     public boolean bindAllUsb;
@@ -639,6 +642,7 @@ public class PreferenceConfiguration {
         config.vrStatsPanel = prefs.getBoolean(VR_STATS_PANEL_PREF_STRING, DEFAULT_VR_STATS_PANEL);
         config.vrSharpness = prefs.getInt(VR_SHARPNESS_PREF_STRING, DEFAULT_VR_SHARPNESS);
         config.vrRecenterVertically = prefs.getBoolean(VR_RECENTER_VERTICAL_PREF_STRING, DEFAULT_VR_RECENTER_VERTICAL);
+        config.vrMatchPcResolution = prefs.getBoolean(VR_MATCH_PC_RESOLUTION_PREF_STRING, DEFAULT_VR_MATCH_PC_RESOLUTION);
         try {
             config.vrLensDistanceMm = Integer.parseInt(prefs.getString(VR_LENS_DISTANCE_PREF_STRING, DEFAULT_VR_LENS_DISTANCE));
         } catch (NumberFormatException e) {

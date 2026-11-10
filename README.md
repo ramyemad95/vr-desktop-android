@@ -24,6 +24,9 @@ adds:
 - **Settings → VR Settings**: VR mode on/off, the viewer's lens type, the virtual screen size, sharpness, head
   tracking on/off, the refresh rate, and a stats panel (network status, PC encode and phone decode times) below the
   virtual screen.
+- **Resolution: match the PC** (with the VR Desktop Host app): the stream follows the PC display's mode, so a
+  fullscreen game at 1080p streams at 1080p and the desktop at 4K, with the bitrate set to match. See
+  [docs/PROTOCOL.md](docs/PROTOCOL.md) (v1).
 - **Its own app ID** (`io.github.ramyemad95.vrdesktop`) and name, so it installs next to the real Moonlight.
 
 ```
