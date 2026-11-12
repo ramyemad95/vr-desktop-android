@@ -27,6 +27,12 @@ adds:
 - **Resolution: match the PC** (with the VR Desktop Host app): the stream follows the PC display's mode, so a
   fullscreen game at 1080p streams at 1080p and the desktop at 4K, with the bitrate set to match. See
   [docs/PROTOCOL.md](docs/PROTOCOL.md) (v1).
+- **Picture settings**: screen brightness held while streaming (the headset covers the light sensor), HDR white
+  level and highlight compression, Color and Contrast, to tune the picture toward a TV's.
+- **Color space (HDR)**: "Native" shows HDR colors in the phone screen's full color range, like a TV's Native color
+  space; "Auto" converts them to sRGB.
+- **FC 27 mode**: a fixed 1080p HDR stream from the start, for EA SPORTS FC 27, with no reconnects when the game
+  starts or ends.
 - **Its own app ID** (`io.github.ramyemad95.vrdesktop`) and name, so it installs next to the real Moonlight.
 
 ```

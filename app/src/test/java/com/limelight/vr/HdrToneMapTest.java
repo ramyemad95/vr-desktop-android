@@ -70,8 +70,46 @@ public class HdrToneMapTest {
     }
 
     @Test
+    public void nativeColorsKeepWhiteAndGray() {
+        // Both matrices map BT.2020 white to the output's white (same D65 white point), so grays don't change
+        float pq = HdrToneMap.nitsToPq(50f);
+        float[] srgb = HdrToneMap.toSdr(pq, pq, pq, false);
+        float[] nativeOut = HdrToneMap.toSdr(pq, pq, pq, true);
+        for (int i = 0; i < 3; i++) {
+            assertEquals(srgb[i], nativeOut[i], 2e-3f);
+        }
+        for (float[] m : new float[][] {HdrToneMap.BT2020_TO_BT709, HdrToneMap.BT2020_TO_DISPLAY_P3}) {
+            for (int row = 0; row < 3; row++) {
+                assertEquals(1f, m[row * 3] + m[row * 3 + 1] + m[row * 3 + 2], 2e-4f);
+            }
+        }
+    }
+
+    @Test
+    public void nativeColorsKeepSaturatedGreenThatSrgbClips() {
+        // A saturated BT.2020 green, like a lit pitch: its red falls outside sRGB and clips to 0 there, but Display P3
+        // still holds part of it, so the color isn't flattened onto sRGB's edge
+        float g = HdrToneMap.nitsToPq(150f);
+        float r = HdrToneMap.nitsToPq(42f);
+        float b = HdrToneMap.nitsToPq(5f);
+        float[] srgb = HdrToneMap.toSdr(r, g, b, false);
+        float[] nativeOut = HdrToneMap.toSdr(r, g, b, true);
+        assertEquals(0f, srgb[0], 1e-6f);
+        assertTrue("native red " + nativeOut[0], nativeOut[0] > 0.05f);
+        // Green is the brightest channel in both
+        assertTrue(srgb[1] > srgb[2] && nativeOut[1] > nativeOut[0] && nativeOut[1] > nativeOut[2]);
+    }
+
+    @Test
+    public void shaderFunctionUsesTheChosenMatrix() {
+        assertTrue(HdrToneMap.shaderFunction(false).contains(String.valueOf(HdrToneMap.BT2020_TO_BT709[0])));
+        assertTrue(HdrToneMap.shaderFunction(true).contains(String.valueOf(HdrToneMap.BT2020_TO_DISPLAY_P3[0])));
+        assertTrue(!HdrToneMap.shaderFunction(true).contains(String.valueOf(HdrToneMap.BT2020_TO_BT709[0])));
+    }
+
+    @Test
     public void shaderFunctionUsesTheSameConstants() {
-        String glsl = HdrToneMap.shaderFunction();
+        String glsl = HdrToneMap.shaderFunction(true);
         assertTrue(glsl.contains("vec3 hdrToSdr(vec3 pq)"));
         assertTrue(glsl.contains(String.valueOf(HdrToneMap.KNEE)));
         assertTrue(glsl.contains(String.valueOf(10000f / HdrToneMap.SDR_WHITE_NITS)));

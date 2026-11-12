@@ -19,6 +19,7 @@ import com.limelight.R;
 import com.limelight.nvstream.av.video.VideoDecoderRenderer;
 import com.limelight.nvstream.jni.MoonBridge;
 import com.limelight.preferences.PreferenceConfiguration;
+import com.limelight.vr.FramePacer;
 import com.limelight.vr.VrStats;
 
 import android.annotation.TargetApi;
@@ -116,6 +117,12 @@ public class MediaCodecDecoderRenderer extends VideoDecoderRenderer implements C
     private PreferenceConfiguration prefs;
 
     private LinkedBlockingQueue<Integer> outputBufferQueue = new LinkedBlockingQueue<>();
+
+    // Smooth video (VR): the pacer that decides when the VR renderer shows each frame, and each queued frame's
+    // time on the PC by its codec timestamp
+    private volatile FramePacer framePacer;
+    private final java.util.concurrent.ConcurrentHashMap<Long, Long> pcTimeByPts = new java.util.concurrent.ConcurrentHashMap<>();
+
     private static final int OUTPUT_BUFFER_QUEUE_LIMIT = 2;
     private long lastRenderedFrameTimeNanos;
     private HandlerThread choreographerHandlerThread;
@@ -713,6 +720,10 @@ public class MediaCodecDecoderRenderer extends VideoDecoderRenderer implements C
                 nextInputBuffer = null;
                 nextInputBufferIndex = -1;
                 outputBufferQueue.clear();
+                if (framePacer != null) {
+                    // The pacer's held frames are output buffers too
+                    framePacer.clear();
+                }
 
                 // If we just need a flush, do so now with all threads quiesced.
                 if (codecRecoveryType.get() == CR_RECOVERY_TYPE_FLUSH) {
@@ -1016,6 +1027,55 @@ public class MediaCodecDecoderRenderer extends VideoDecoderRenderer implements C
         });
     }
 
+    /** Smooth video (VR): shows frames through this pacer, or as they come with null. Set before the stream starts. */
+    public void setFramePacer(FramePacer pacer) {
+        framePacer = pacer;
+        if (pacer != null) {
+            pacer.setOutput(new FramePacer.Output() {
+                @Override
+                public void show(int index) {
+                    releasePacedFrame(index, true);
+                }
+
+                @Override
+                public void drop(int index) {
+                    releasePacedFrame(index, false);
+                }
+            });
+        }
+    }
+
+    /** Smooth video: hands a decoded frame to the pacer, which shows or drops it later (see FramePacer). */
+    private void holdForPacer(FramePacer pacer, int index, long ptsUs) {
+        Long pcTimeUs = pcTimeByPts.remove(ptsUs);
+        if (pcTimeUs == null) {
+            // A frame the pacer can't time (queued before it was set): show it now
+            videoDecoder.releaseOutputBuffer(index, System.nanoTime());
+            activeWindowVideoStats.totalFramesRendered++;
+            return;
+        }
+        pacer.onFrameDecoded(index, pcTimeUs, System.nanoTime());
+    }
+
+    /** Smooth video: the pacer's frames go back to the decoder here, rendered to the VR view or not. GL thread. */
+    private void releasePacedFrame(int index, boolean render) {
+        MediaCodec codec = videoDecoder;
+        if (stopping || codec == null) {
+            return;
+        }
+        try {
+            if (render) {
+                codec.releaseOutputBuffer(index, System.nanoTime());
+                activeWindowVideoStats.totalFramesRendered++;
+            }
+            else {
+                codec.releaseOutputBuffer(index, false);
+            }
+        } catch (IllegalStateException e) {
+            // The decoder is stopping or being restarted, and its buffers go with it
+        }
+    }
+
     private void startRendererThread()
     {
         rendererThread = new Thread() {
@@ -1032,8 +1092,19 @@ public class MediaCodecDecoderRenderer extends VideoDecoderRenderer implements C
 
                             numFramesOut++;
 
+                            FramePacer pacer = framePacer;
+                            if (pacer != null) {
+                                // Smooth video (VR): every frame goes to the pacer in order, which shows each one
+                                // at its time from the VR renderer's refreshes (FramePacer)
+                                holdForPacer(pacer, lastIndex, presentationTimeUs);
+                                while ((outIndex = videoDecoder.dequeueOutputBuffer(info, 0)) >= 0) {
+                                    numFramesOut++;
+                                    presentationTimeUs = info.presentationTimeUs;
+                                    holdForPacer(pacer, outIndex, presentationTimeUs);
+                                }
+                            }
                             // Render the latest frame now if frame pacing isn't in balanced mode
-                            if (prefs.framePacing != PreferenceConfiguration.FRAME_PACING_BALANCED) {
+                            else if (prefs.framePacing != PreferenceConfiguration.FRAME_PACING_BALANCED) {
                                 // Get the last output buffer in the queue
                                 while ((outIndex = videoDecoder.dequeueOutputBuffer(info, 0)) >= 0) {
                                     videoDecoder.releaseOutputBuffer(lastIndex, false);
@@ -1222,6 +1293,10 @@ public class MediaCodecDecoderRenderer extends VideoDecoderRenderer implements C
     public void stop() {
         // May be called already, but we'll call it now to be safe
         prepareForStop();
+        if (framePacer != null) {
+            // The decoder's buffers go away with it
+            framePacer.clear();
+        }
 
         // Wait for the Choreographer looper to shut down (if we have one)
         if (choreographerHandlerThread != null) {
@@ -1350,7 +1425,7 @@ public class MediaCodecDecoderRenderer extends VideoDecoderRenderer implements C
     @Override
     public int submitDecodeUnit(byte[] decodeUnitData, int decodeUnitLength, int decodeUnitType,
                                 int frameNumber, int frameType, char frameHostProcessingLatency,
-                                long receiveTimeUs, long enqueueTimeUs) {
+                                long receiveTimeUs, long enqueueTimeUs, long presentationTimeUs) {
         if (stopping) {
             // Don't bother if we're stopping
             return MoonBridge.DR_OK;
@@ -1698,6 +1773,14 @@ public class MediaCodecDecoderRenderer extends VideoDecoderRenderer implements C
             timestampUs = lastTimestampUs + 1;
         }
         lastTimestampUs = timestampUs;
+
+        if (framePacer != null) {
+            if (pcTimeByPts.size() > 256) {
+                // Frames that never came out of the decoder (a flush or a restart)
+                pcTimeByPts.clear();
+            }
+            pcTimeByPts.put(timestampUs, presentationTimeUs);
+        }
 
         numFramesIn++;
 

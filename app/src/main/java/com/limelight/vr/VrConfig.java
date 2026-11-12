@@ -13,9 +13,27 @@ public final class VrConfig {
     public final float sharpness;
     /** A re-center also follows the head's pitch, so the screen goes where the user looks, up or down. */
     public final boolean recenterVertically;
+    /** HDR video is converted to the panel's own wide color range (Display P3) instead of sRGB; see {@link HdrToneMap}. */
+    public final boolean nativeColors;
+    /** HDR white level and compression, color and contrast. */
+    public final PictureSettings picture;
+    /** Softens color (not brightness) detail to what a PenTile panel's red and blue subpixels can show. */
+    public final boolean antiScreenDoor;
+    /** 3D Mode: how a 3D frame is split between the eyes, or {@link StereoMode#OFF}. */
+    public final StereoMode stereoMode;
+    /** Four samples per pixel and built-in sharpening when the picture is scaled to the screen; see {@link VrShaders}. */
+    public final boolean hqScaling;
 
     public VrConfig(ViewerProfile viewer, float screenWidthDegrees, int videoWidth, int videoHeight, float metersPerPixel,
-                    float sharpness, boolean recenterVertically) {
+                    float sharpness, boolean recenterVertically, boolean nativeColors, PictureSettings picture,
+                    boolean antiScreenDoor, StereoMode stereoMode) {
+        this(viewer, screenWidthDegrees, videoWidth, videoHeight, metersPerPixel, sharpness, recenterVertically,
+                nativeColors, picture, antiScreenDoor, stereoMode, false);
+    }
+
+    public VrConfig(ViewerProfile viewer, float screenWidthDegrees, int videoWidth, int videoHeight, float metersPerPixel,
+                    float sharpness, boolean recenterVertically, boolean nativeColors, PictureSettings picture,
+                    boolean antiScreenDoor, StereoMode stereoMode, boolean hqScaling) {
         this.viewer = viewer;
         this.screenWidthDegrees = screenWidthDegrees;
         this.videoWidth = videoWidth;
@@ -23,6 +41,11 @@ public final class VrConfig {
         this.metersPerPixel = metersPerPixel;
         this.sharpness = Math.max(0f, Math.min(1f, sharpness));
         this.recenterVertically = recenterVertically;
+        this.nativeColors = nativeColors;
+        this.picture = picture != null ? picture : PictureSettings.STANDARD;
+        this.antiScreenDoor = antiScreenDoor;
+        this.stereoMode = stereoMode != null ? stereoMode : StereoMode.OFF;
+        this.hqScaling = hqScaling;
     }
 
     /** The "Sharpness" setting, in percent, as an unsharp-mask strength. */

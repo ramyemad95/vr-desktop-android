@@ -9,9 +9,11 @@ public abstract class VideoDecoderRenderer {
 
     // This is called once for each frame-start NALU. This means it will be called several times
     // for an IDR frame which contains several parameter sets and the I-frame data.
+    // presentationTimeUs is the frame's time on the PC (from its RTP timestamp, epoch at the first frame), or a
+    // time synthesized from the receive time when the host doesn't send one.
     public abstract int submitDecodeUnit(byte[] decodeUnitData, int decodeUnitLength, int decodeUnitType,
                                          int frameNumber, int frameType, char frameHostProcessingLatency,
-                                         long receiveTimeUs, long enqueueTimeUs);
+                                         long receiveTimeUs, long enqueueTimeUs, long presentationTimeUs);
     
     public abstract void cleanup();
 

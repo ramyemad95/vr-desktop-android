@@ -338,6 +338,84 @@
         <item>59.5</item>
         <item>60</item>
     </string-array>
+    <string-array name="vr_brightness_names">
+        <item>@string/vr_brightness_system</item>
+        <item>50%</item>
+        <item>75%</item>
+        <item>@string/vr_brightness_100</item>
+    </string-array>
+    <string-array name="vr_brightness_values" translatable="false">
+        <item>0</item>
+        <item>50</item>
+        <item>75</item>
+        <item>100</item>
+    </string-array>
+    <string-array name="vr_hdr_white_names">
+        <item>@string/vr_hdr_white_100</item>
+        <item>150 nits</item>
+        <item>@string/vr_hdr_white_203</item>
+        <item>250 nits</item>
+        <item>300 nits</item>
+        <item>@string/vr_hdr_white_400</item>
+    </string-array>
+    <string-array name="vr_hdr_white_values" translatable="false">
+        <item>100</item>
+        <item>150</item>
+        <item>203</item>
+        <item>250</item>
+        <item>300</item>
+        <item>400</item>
+    </string-array>
+    <string-array name="vr_hdr_compression_names">
+        <item>@string/vr_hdr_compression_soft</item>
+        <item>@string/vr_hdr_compression_normal</item>
+        <item>@string/vr_hdr_compression_punchy</item>
+    </string-array>
+    <string-array name="vr_hdr_compression_values" translatable="false">
+        <item>0.6</item>
+        <item>0.75</item>
+        <item>0.9</item>
+    </string-array>
+    <string-array name="vr_contrast_names">
+        <item>@string/vr_contrast_22</item>
+        <item>@string/vr_contrast_23</item>
+        <item>@string/vr_contrast_24</item>
+    </string-array>
+    <string-array name="vr_contrast_values" translatable="false">
+        <item>2.2</item>
+        <item>2.3</item>
+        <item>2.4</item>
+    </string-array>
+    <string-array name="vr_smooth_video_names">
+        <item>@string/vr_smooth_video_1</item>
+        <item>@string/vr_smooth_video_2</item>
+        <item>@string/vr_smooth_video_off</item>
+    </string-array>
+    <string-array name="vr_smooth_video_values" translatable="false">
+        <item>1</item>
+        <item>2</item>
+        <item>0</item>
+    </string-array>
+    <string-array name="vr_3d_mode_names">
+        <item>@string/vr_3d_mode_off</item>
+        <item>@string/vr_3d_mode_sbs</item>
+        <item>@string/vr_3d_mode_sbs_rl</item>
+        <item>@string/vr_3d_mode_tb</item>
+    </string-array>
+    <string-array name="vr_3d_mode_values" translatable="false">
+        <item>off</item>
+        <item>sbs</item>
+        <item>sbs_rl</item>
+        <item>tb</item>
+    </string-array>
+    <string-array name="vr_color_space_names">
+        <item>@string/vr_color_space_native</item>
+        <item>@string/vr_color_space_auto</item>
+    </string-array>
+    <string-array name="vr_color_space_values" translatable="false">
+        <item>native</item>
+        <item>auto</item>
+    </string-array>
     <string-array name="vr_refresh_rate_names">
         <item>@string/vr_refresh_rate_highest</item>
         <item>@string/vr_refresh_rate_120</item>

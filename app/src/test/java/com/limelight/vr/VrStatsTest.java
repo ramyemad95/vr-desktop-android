@@ -51,8 +51,11 @@ public class VrStatsTest {
     @Test
     public void linesShowTheMeasuredValues() {
         VrStats s = stats(0f, 5, 1, 4.25f, 6.04f);
-        assertEquals("VIDEO 2560x1440  in 60/60 fps", s.videoLine(false));
-        assertEquals("VIDEO 2560x1440 HDR  in 60/60 fps", s.videoLine(true));
+        assertEquals("VIDEO 2560x1440  in 60/60 fps", s.videoLine(false, StereoMode.OFF));
+        assertEquals("VIDEO 2560x1440 HDR  in 60/60 fps", s.videoLine(true, StereoMode.OFF));
+        assertEquals("VIDEO 2560x1440 HDR 3D SBS  in 60/60 fps", s.videoLine(true, StereoMode.SIDE_BY_SIDE));
+        assertEquals("VIDEO 2560x1440 3D TB  in 60/60 fps", s.videoLine(false, StereoMode.TOP_BOTTOM));
+        assertEquals("VIDEO 2560x1440  in 60/60 fps", s.videoLine(false, null));
         assertEquals("PC 4.3 ms  DECODE 6.0 ms  VR 120 fps", s.processingLine(119.8f));
     }
 }

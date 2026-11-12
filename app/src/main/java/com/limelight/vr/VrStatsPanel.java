@@ -28,8 +28,11 @@ final class VrStatsPanel {
     private final Paint background = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint text = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final RectF bounds = new RectF(0, 0, WIDTH, HEIGHT);
+    private final StereoMode stereo;
 
-    VrStatsPanel() {
+    /** @param stereo the 3D Mode setting, which stays the same for the whole stream */
+    VrStatsPanel(StereoMode stereo) {
+        this.stereo = stereo;
         background.setColor(0xD8101014);
         text.setTypeface(Typeface.create(Typeface.MONOSPACE, Typeface.BOLD));
         text.setTextSize(40f);
@@ -47,7 +50,7 @@ final class VrStatsPanel {
             return bitmap;
         }
         drawLine(0, stats.networkLine(connectionPoor), colorOf(stats.network(connectionPoor)));
-        drawLine(1, stats.videoLine(hdr), COLOR_TEXT);
+        drawLine(1, stats.videoLine(hdr, stereo), COLOR_TEXT);
         VrStats.Level processing = stats.processing();
         drawLine(2, stats.processingLine(vrFps), processing == VrStats.Level.GOOD ? COLOR_TEXT : colorOf(processing));
         return bitmap;

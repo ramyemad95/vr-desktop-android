@@ -39,6 +39,8 @@ import com.limelight.utils.UiHelper;
 import com.limelight.vr.ModeFollower;
 import com.limelight.vr.PcDisplayMode;
 import com.limelight.vr.PcModeClient;
+import com.limelight.vr.FramePacer;
+import com.limelight.vr.PictureSettings;
 import com.limelight.vr.VrConfig;
 import com.limelight.vr.VrStats;
 import com.limelight.vr.VrStreamView;
@@ -156,6 +158,7 @@ public class Game extends Activity implements SurfaceHolder.Callback,
     // VR "Resolution: match the PC": the host app's display mode, and the follower that restarts the stream when a
     // game changes it (main thread, except the client's watcher)
     private PcModeClient pcModeClient;
+    private FramePacer framePacer; // Smooth video in VR, or null
     private PcDisplayMode streamPcMode;
     private ModeFollower modeFollower;
     private boolean restartingForPcMode;
@@ -246,6 +249,15 @@ public class Game extends Activity implements SurfaceHolder.Callback,
         // VR: stream at the resolution the PC's display is in, before anything below reads it
         if (prefConfig.vrMode && prefConfig.vrMatchPcResolution) {
             matchPcDisplayMode();
+        }
+        else if (prefConfig.vrFc27Mode) {
+            LimeLog.info("VR: FC 27 mode: streaming " + prefConfig.width + "x" + prefConfig.height +
+                    (prefConfig.enableHdr ? " HDR" : "") + " at " + (prefConfig.bitrate / 1000) + " Mbps");
+        }
+        if (prefConfig.vrMode && prefConfig.vrSmoothVideoFrames > 0) {
+            framePacer = new FramePacer(prefConfig.vrSmoothVideoFrames, prefConfig.fps);
+            LimeLog.info("VR: smooth video with " + prefConfig.vrSmoothVideoFrames + " frame(s) of buffer (" +
+                    (framePacer.bufferNanos() / 1_000_000) + " ms)");
         }
 
         // Enter landscape unless we're on a square screen
@@ -421,6 +433,7 @@ public class Game extends Activity implements SurfaceHolder.Callback,
                 willStreamHdr,
                 glPrefs.glRenderer,
                 this);
+        decoderRenderer.setFramePacer(framePacer);
 
         // Don't stream HDR if the decoder can't support it
         if (willStreamHdr && !decoderRenderer.isHevcMain10Hdr10Supported() && !decoderRenderer.isAv1Main10Supported()) {
@@ -669,13 +682,29 @@ public class Game extends Activity implements SurfaceHolder.Callback,
                 prefConfig.vrScreenSizeDegrees, prefConfig.width, prefConfig.height,
                 VrConfig.metersPerPixel(Build.MODEL, Math.max(metrics.widthPixels, metrics.heightPixels),
                         metrics.xdpi, metrics.ydpi, metrics.densityDpi),
-                VrConfig.sharpnessFromPercent(prefConfig.vrSharpness), prefConfig.vrRecenterVertically);
+                VrConfig.sharpnessFromPercent(prefConfig.vrSharpness), prefConfig.vrRecenterVertically,
+                prefConfig.vrNativeColors, new PictureSettings(prefConfig.vrHdrWhiteNits, prefConfig.vrHdrKnee,
+                        prefConfig.vrColorPercent / 100f, prefConfig.vrContrastGamma), prefConfig.vrAntiScreenDoor,
+                prefConfig.vrStereoMode, prefConfig.vrHqScaling);
+
+        // Inside a headset the light sensor is covered, so automatic brightness dims the screen; this setting holds
+        // it at a fixed level while streaming
+        if (prefConfig.vrBrightnessPercent > 0) {
+            WindowManager.LayoutParams lp = getWindow().getAttributes();
+            lp.screenBrightness = Math.min(prefConfig.vrBrightnessPercent, 100) / 100f;
+            getWindow().setAttributes(lp);
+            LimeLog.info("VR: screen brightness held at " + prefConfig.vrBrightnessPercent + "%");
+        }
 
         vrView = new VrStreamView(this);
         // Draw above the StreamView's (unused) surface but below the overlays
         vrView.setZOrderMediaOverlay(true);
+        // HDR on the phone's screen: the window asks for HDR, and the VR view draws to a 10-bit BT.2020 PQ surface
+        if (prefConfig.vrHdrScreen && Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            getWindow().setColorMode(ActivityInfo.COLOR_MODE_HDR);
+        }
         vrView.configure(vrConfig, prefConfig.vrHeadTracking, prefConfig.vrRefreshRate, prefConfig.vrStatsPanel,
-                new VrStreamView.Listener() {
+                prefConfig.vrHdrScreen, new VrStreamView.Listener() {
             @Override
             public void onVideoSurfaceAvailable(Surface surface) {
                 surfaceCreated = true;
@@ -687,6 +716,7 @@ public class Game extends Activity implements SurfaceHolder.Callback,
                 onRenderSurfaceDestroyed();
             }
         });
+        vrView.setFramePacer(framePacer);
 
         // The StreamView stays in place underneath, so it keeps input focus for keyboards and mice
         FrameLayout parent = (FrameLayout) streamView.getParent();
@@ -2685,7 +2715,7 @@ public class Game extends Activity implements SurfaceHolder.Callback,
         VrStreamView view = vrView;
         if (view != null) {
             // The VR view draws to an SDR surface, so it tone-maps HDR10 frames itself
-            view.setHdrMode(enabled);
+            view.setHdrMode(enabled, hdrMetadata);
         }
     }
 

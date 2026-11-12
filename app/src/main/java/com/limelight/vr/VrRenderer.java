@@ -1,8 +1,10 @@
 package com.limelight.vr;
 
 import android.graphics.SurfaceTexture;
+import android.opengl.EGL14;
 import android.opengl.GLES11Ext;
 import android.opengl.GLES20;
+import android.opengl.GLES30;
 import android.opengl.GLSurfaceView;
 import android.opengl.GLUtils;
 import android.view.Surface;
@@ -46,117 +48,9 @@ final class VrRenderer implements GLSurfaceView.Renderer, SurfaceTexture.OnFrame
     /** The stats panel hangs below the virtual screen, this wide and this far under its bottom edge. */
     private static final float PANEL_WIDTH_DEGREES = 30f;
     private static final float PANEL_GAP_METERS = 0.06f;
-    /**
-     * Mip level bias for the frame. Trilinear filtering picks a level whose texels match the pixel's footprint and
-     * then blends, which is softer than a box over the footprint; half a level sharper keeps text crisp without
-     * visible shimmer.
-     */
-    private static final float LOD_BIAS = -0.5f;
     private static final float MAX_ANISOTROPY = 4f;
     private static final int GL_TEXTURE_MAX_ANISOTROPY_EXT = 0x84FE;
     private static final int GL_MAX_TEXTURE_MAX_ANISOTROPY_EXT = 0x84FF;
-
-    private static final String PRECISION =
-            "#ifdef GL_FRAGMENT_PRECISION_HIGH\n" +
-            "precision highp float;\n" +
-            "#else\n" +
-            "precision mediump float;\n" +
-            "#endif\n";
-
-    private static final String QUAD_VERTEX_SHADER =
-            "attribute vec2 aPosition;\n" +
-            "varying vec2 vUv;\n" +
-            "void main() {\n" +
-            "    vUv = aPosition * 0.5 + 0.5;\n" +
-            "    gl_Position = vec4(aPosition, 0.0, 1.0);\n" +
-            "}\n";
-
-    private static final String PREFILTER_FRAGMENT_SHADER =
-            "#extension GL_OES_EGL_image_external : require\n" +
-            PRECISION +
-            "uniform samplerExternalOES uVideo;\n" +
-            "uniform mat4 uTexMatrix;\n" +
-            "uniform float uHdr;\n" +
-            "varying vec2 vUv;\n" +
-            "\n" +
-            HdrToneMap.shaderFunction() +
-            "\n" +
-            "void main() {\n" +
-            // One output texel per video pixel, so a single tap reads each pixel exactly
-            "    vec3 c = texture2D(uVideo, (uTexMatrix * vec4(vUv, 0.0, 1.0)).xy).rgb;\n" +
-            "    if (uHdr > 0.5) {\n" +
-            "        c = hdrToSdr(c);\n" +
-            "    }\n" +
-            "    gl_FragColor = vec4(c, 1.0);\n" +
-            "}\n";
-
-    private static final String EYE_VERTEX_SHADER =
-            "attribute vec2 aPosition;\n" +
-            "attribute vec2 aTan;\n" +
-            "varying vec2 vTan;\n" +
-            "void main() {\n" +
-            "    vTan = aTan;\n" +
-            "    gl_Position = vec4(aPosition, 0.0, 1.0);\n" +
-            "}\n";
-
-    private static final String EYE_FRAGMENT_SHADER_BODY =
-            PRECISION +
-            "uniform sampler2D uFrame;\n" +
-            "uniform mat3 uEyeToScene;\n" +
-            "uniform vec3 uEyePos;\n" +
-            "uniform vec2 uScreenHalfSize;\n" +
-            "uniform float uScreenDistance;\n" +
-            "uniform float uMaxTan2;\n" +
-            "uniform float uHasFrame;\n" +
-            "uniform float uSharpness;\n" +
-            "uniform sampler2D uPanelTex;\n" +
-            "uniform float uPanel;\n" +
-            "uniform vec2 uPanelCenter;\n" +
-            "uniform vec2 uPanelHalfSize;\n" +
-            "varying vec2 vTan;\n" +
-            "\n" +
-            "void main() {\n" +
-            "    float r2 = dot(vTan, vTan);\n" +
-            "    float lensFade = 1.0 - smoothstep(uMaxTan2 * 0.85, uMaxTan2, r2);\n" +
-            "    vec3 dir = uEyeToScene * vec3(vTan, -1.0);\n" +
-            // A dim gradient around the horizon gives a sense of orientation.
-            "    vec3 color = mix(vec3(0.015, 0.015, 0.02), vec3(0.05, 0.05, 0.065), smoothstep(-0.25, 0.25, normalize(dir).y));\n" +
-            // Intersect with the plane z = -distance, for every pixel (clamped when looking away from the screen).
-            "    float dz = min(dir.z, -1e-4);\n" +
-            "    float t = (-uScreenDistance - uEyePos.z) / dz;\n" +
-            "    vec2 uv = (uEyePos.xy + t * dir.xy) / (2.0 * uScreenHalfSize) + 0.5;\n" +
-            // The frame has mipmaps, so it's sampled for every pixel, in uniform control flow, where the hardware
-            // can pick the level from the coordinate's derivatives. Outside the screen the result is unused.
-            "    vec3 screen = texture2D(uFrame, uv, " + LOD_BIAS + ").rgb;\n" +
-            // Unsharp mask against the next mip level: the lens and the downscale both soften text.
-            "    if (uSharpness > 0.0) {\n" +
-            "        vec3 wide = texture2D(uFrame, uv, " + (LOD_BIAS + 1f) + ").rgb;\n" +
-            "        screen = clamp(screen + uSharpness * (screen - wide), 0.0, 1.0);\n" +
-            "    }\n" +
-            "    if (uHasFrame < 0.5) {\n" +
-            "        screen = vec3(0.10, 0.10, 0.12);\n" +
-            "    }\n" +
-            "#ifdef DERIVATIVES\n" +
-            // Anti-aliased screen edges: how far inside the screen this pixel is, in pixels.
-            "    vec2 footprint = max(abs(dFdx(uv)) + abs(dFdy(uv)), vec2(1e-6));\n" +
-            "    vec2 edge = min(uv, 1.0 - uv) / footprint;\n" +
-            "    float coverage = clamp(min(edge.x, edge.y) + 0.5, 0.0, 1.0);\n" +
-            "#else\n" +
-            "    float coverage = (uv.x >= 0.0 && uv.x <= 1.0 && uv.y >= 0.0 && uv.y <= 1.0) ? 1.0 : 0.0;\n" +
-            "#endif\n" +
-            "    if (dir.z < 0.0) {\n" +
-            "        color = mix(color, screen, coverage);\n" +
-            "    }\n" +
-            // The stats panel lies in the same plane, below the screen. Its bitmap is premultiplied and has mipmaps;
-            // the branch is on a uniform, so the texture's derivatives stay defined.
-            "    if (uPanel > 0.5) {\n" +
-            "        vec2 puv = (uEyePos.xy + t * dir.xy - uPanelCenter) / (2.0 * uPanelHalfSize) + 0.5;\n" +
-            "        vec4 panel = texture2D(uPanelTex, vec2(puv.x, 1.0 - puv.y));\n" +
-            "        float inside = (dir.z < 0.0 && puv.x >= 0.0 && puv.x <= 1.0 && puv.y >= 0.0 && puv.y <= 1.0) ? 1.0 : 0.0;\n" +
-            "        color = color * (1.0 - panel.a * inside) + panel.rgb * inside;\n" +
-            "    }\n" +
-            "    gl_FragColor = vec4(color * lensFade, 1.0);\n" +
-            "}\n";
 
     private static final float[] QUAD = {-1f, -1f, 1f, -1f, -1f, 1f, 1f, 1f};
 
@@ -171,6 +65,10 @@ final class VrRenderer implements GLSurfaceView.Renderer, SurfaceTexture.OnFrame
     private int program;
     private int aPosition, aTan;
     private int uFrame, uEyeToScene, uEyePos, uScreenHalfSize, uScreenDistance, uMaxTan2, uHasFrame, uSharpness;
+    // 3D Mode: -1 when it's off (the shader doesn't have them, and GL ignores the calls)
+    private int uEyeRegion, uRegionInset;
+    private final float[] eyeRegion = new float[4];
+    private final float[] regionInset = new float[2];
 
     // GL thread state: prefilter pass
     private int prefilterProgram;
@@ -184,6 +82,13 @@ final class VrRenderer implements GLSurfaceView.Renderer, SurfaceTexture.OnFrame
     private SurfaceTexture surfaceTexture;
     private Surface videoSurface;
     private final AtomicInteger pendingFrames = new AtomicInteger();
+    private volatile FramePacer framePacer;
+    /** The view draws to a 10-bit BT.2020 PQ surface (the phone's HDR screen); set before onSurfaceCreated(). */
+    private volatile boolean pqOutput;
+    private volatile HdrMetadata hdrMetadata;
+    private HdrMetadata appliedHdrMetadata;
+    private long lastDrawNanos;
+    private long refreshNanos = 1_000_000_000L / 60;
     private boolean hasFrame;
     private final float[] texMatrix = new float[16];
 
@@ -215,7 +120,7 @@ final class VrRenderer implements GLSurfaceView.Renderer, SurfaceTexture.OnFrame
     VrRenderer(VrConfig config, HeadTracker tracker, boolean statsPanel, SurfaceListener surfaceListener) {
         this.config = config;
         this.tracker = tracker;
-        this.statsPanel = statsPanel ? new VrStatsPanel() : null;
+        this.statsPanel = statsPanel ? new VrStatsPanel(config.stereoMode) : null;
         this.surfaceListener = surfaceListener;
         quad.position(0);
     }
@@ -230,9 +135,45 @@ final class VrRenderer implements GLSurfaceView.Renderer, SurfaceTexture.OnFrame
         connectionPoor = poor;
     }
 
-    /** Any thread. Whether the PC is sending HDR10 (PQ, BT.2020), which the prefilter then tone-maps to SDR. */
-    void setHdr(boolean enabled) {
+    /** GL thread, by the EGL surface factory: whether the window surface it made is the phone's HDR screen. */
+    void setPqOutput(boolean pq) {
+        pqOutput = pq;
+    }
+
+    /**
+     * Any thread. Whether the PC is sending HDR10 (PQ, BT.2020), which the prefilter then tone-maps to SDR or passes
+     * to the HDR screen, and the stream's HDR metadata (null if the PC sent none).
+     */
+    void setHdr(boolean enabled, HdrMetadata metadata) {
         hdr = enabled;
+        if (enabled && metadata != null) {
+            hdrMetadata = metadata;
+        }
+    }
+
+    /**
+     * GL thread. On the HDR screen, tells the display how bright the stream was made to go (HDR10 static metadata on
+     * the window surface), as a video player does for HDR video, so it doesn't have to assume.
+     */
+    private void applyHdrMetadata() {
+        HdrMetadata metadata = hdrMetadata;
+        if (!pqOutput || metadata == null || metadata == appliedHdrMetadata) {
+            return;
+        }
+        appliedHdrMetadata = metadata;
+        android.opengl.EGLDisplay display = EGL14.eglGetCurrentDisplay();
+        android.opengl.EGLSurface surface = EGL14.eglGetCurrentSurface(EGL14.EGL_DRAW);
+        int set = 0;
+        int[][] attributes = metadata.eglAttributes();
+        for (int[] attribute : attributes) {
+            if (EGL14.eglSurfaceAttrib(display, surface, attribute[0], attribute[1])) {
+                set++;
+            }
+        }
+        // Clear the error flag a refused attribute leaves behind
+        int error = EGL14.eglGetError();
+        LimeLog.info("VR: HDR metadata from the PC: " + metadata + "; set " + set + " of " + attributes.length +
+                " values on the HDR screen" + (error != EGL14.EGL_SUCCESS ? " (EGL error 0x" + Integer.toHexString(error) + ")" : ""));
     }
 
     void setDisplayRotation(int rotation) {
@@ -269,8 +210,10 @@ final class VrRenderer implements GLSurfaceView.Renderer, SurfaceTexture.OnFrame
         // Called again only if the EGL context was lost, which also loses the old textures.
         boolean recreated = surfaceTexture != null;
         release();
+        // A new window surface needs the HDR metadata again
+        appliedHdrMetadata = null;
 
-        program = buildEyeProgram();
+        program = buildEyeProgram(pqOutput, config);
         aPosition = GLES20.glGetAttribLocation(program, "aPosition");
         aTan = GLES20.glGetAttribLocation(program, "aTan");
         uFrame = GLES20.glGetUniformLocation(program, "uFrame");
@@ -285,8 +228,11 @@ final class VrRenderer implements GLSurfaceView.Renderer, SurfaceTexture.OnFrame
         uPanel = GLES20.glGetUniformLocation(program, "uPanel");
         uPanelCenter = GLES20.glGetUniformLocation(program, "uPanelCenter");
         uPanelHalfSize = GLES20.glGetUniformLocation(program, "uPanelHalfSize");
+        uEyeRegion = GLES20.glGetUniformLocation(program, "uEyeRegion");
+        uRegionInset = GLES20.glGetUniformLocation(program, "uRegionInset");
+        config.stereoMode.regionInset(config.videoWidth, config.videoHeight, regionInset);
 
-        prefilterProgram = linkProgram(QUAD_VERTEX_SHADER, PREFILTER_FRAGMENT_SHADER);
+        prefilterProgram = linkProgram(VrShaders.QUAD_VERTEX_SHADER, VrShaders.prefilterFragmentShader(config.nativeColors, config.picture, pqOutput));
         if (prefilterProgram == 0) {
             throw new IllegalStateException("VR: could not build the prefilter shader");
         }
@@ -348,8 +294,15 @@ final class VrRenderer implements GLSurfaceView.Renderer, SurfaceTexture.OnFrame
         GLES20.glGenTextures(1, ids, 0);
         frameTexture = ids[0];
         GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, frameTexture);
-        GLES20.glTexImage2D(GLES20.GL_TEXTURE_2D, 0, GLES20.GL_RGBA, config.videoWidth, config.videoHeight, 0,
-                GLES20.GL_RGBA, GLES20.GL_UNSIGNED_BYTE, null);
+        if (pqOutput) {
+            // PQ needs 10 bits per channel, or smooth gradients band
+            GLES20.glTexImage2D(GLES20.GL_TEXTURE_2D, 0, GLES30.GL_RGB10_A2, config.videoWidth, config.videoHeight, 0,
+                    GLES20.GL_RGBA, GLES30.GL_UNSIGNED_INT_2_10_10_10_REV, null);
+        }
+        else {
+            GLES20.glTexImage2D(GLES20.GL_TEXTURE_2D, 0, GLES20.GL_RGBA, config.videoWidth, config.videoHeight, 0,
+                    GLES20.GL_RGBA, GLES20.GL_UNSIGNED_BYTE, null);
+        }
         GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_MIN_FILTER,
                 frameMipmaps ? GLES20.GL_LINEAR_MIPMAP_LINEAR : GLES20.GL_LINEAR);
         GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_MAG_FILTER, GLES20.GL_LINEAR);
@@ -378,7 +331,11 @@ final class VrRenderer implements GLSurfaceView.Renderer, SurfaceTexture.OnFrame
             throw new IllegalStateException("VR: frame buffer incomplete: 0x" + Integer.toHexString(status));
         }
         LimeLog.info("VR: prefiltered frame " + config.videoWidth + "x" + config.videoHeight +
-                (frameMipmaps ? ", mipmaps, anisotropy " + anisotropy : ", no mipmaps (" + version + ")"));
+                (frameMipmaps ? ", mipmaps, anisotropy " + anisotropy : ", no mipmaps (" + version + ")") +
+                (pqOutput ? ", HDR screen (10-bit BT.2020 PQ), colors " + (config.nativeColors ? "native (stretched)" : "accurate") :
+                        ", HDR colors " + (config.nativeColors ? "native (Display P3)" : "sRGB")) + ", " + config.picture +
+                (config.antiScreenDoor ? ", anti screen-door" : "") + (config.hqScaling ? ", high-quality scaling" : "") +
+                (config.stereoMode.isStereo() ? ", " + config.stereoMode.label() : ""));
     }
 
     @Override
@@ -399,8 +356,27 @@ final class VrRenderer implements GLSurfaceView.Renderer, SurfaceTexture.OnFrame
                 " mm wide, screen " + config.screenWidthDegrees + " degrees");
     }
 
+    /** Smooth video: decides which decoded frames to show at each refresh, or null to show the newest. */
+    void setFramePacer(FramePacer pacer) {
+        framePacer = pacer;
+    }
+
+    /** The length of a display refresh, measured between draws (they're paced by the display). */
+    private void measureRefresh(long now) {
+        if (lastDrawNanos != 0) {
+            long interval = now - lastDrawNanos;
+            if (interval > 3_000_000L && interval < 40_000_000L) {
+                refreshNanos = (refreshNanos * 15 + interval) / 16;
+            }
+        }
+        lastDrawNanos = now;
+    }
+
     @Override
     public void onDrawFrame(GL10 unused) {
+        long now = System.nanoTime();
+        measureRefresh(now);
+        applyHdrMetadata();
         // Latch every frame the decoder queued since the last draw; the last one wins. Head motion is
         // drawn at the display's refresh rate even when the desktop isn't changing.
         int frames = pendingFrames.getAndSet(0);
@@ -412,6 +388,13 @@ final class VrRenderer implements GLSurfaceView.Renderer, SurfaceTexture.OnFrame
             surfaceTexture.getTransformMatrix(texMatrix);
             prefilterFrame();
             hasFrame = true;
+        }
+        // Smooth video: only now, after the last frame sent was latched, send the one due next. The decoder's
+        // surface keeps only its newest frame, so sending one before the previous was latched would lose that one.
+        // It's latched at the next refresh.
+        FramePacer pacer = framePacer;
+        if (pacer != null) {
+            pacer.onRefresh(now, refreshNanos);
         }
 
         updateHeadPose();
@@ -439,6 +422,7 @@ final class VrRenderer implements GLSurfaceView.Renderer, SurfaceTexture.OnFrame
         GLES20.glUniform1f(uMaxTan2, maxTan * maxTan);
         GLES20.glUniform1f(uHasFrame, hasFrame ? 1f : 0f);
         GLES20.glUniform1f(uSharpness, config.sharpness);
+        GLES20.glUniform2f(uRegionInset, regionInset[0], regionInset[1]);
         GLES20.glUniform1i(uPanelTex, 1);
         if (statsPanel != null) {
             GLES20.glActiveTexture(GLES20.GL_TEXTURE1);
@@ -461,6 +445,9 @@ final class VrRenderer implements GLSurfaceView.Renderer, SurfaceTexture.OnFrame
             float eyeOffset = (eye == LensDistortion.LEFT_EYE ? -0.5f : 0.5f) * config.viewer.interLensDistance;
             HeadPose.transform(headToScene, eyeOffset, 0f, 0f, eyePos);
             GLES20.glUniform3f(uEyePos, eyePos[0], eyePos[1], eyePos[2]);
+            // 3D Mode: this eye's picture in the frame
+            config.stereoMode.eyeRegion(eye, eyeRegion);
+            GLES20.glUniform4f(uEyeRegion, eyeRegion[0], eyeRegion[1], eyeRegion[2], eyeRegion[3]);
 
             GLES20.glViewport(eye * eyeWidth, 0, eyeWidth, viewHeight);
             FloatBuffer vb = meshVertices[eye];
@@ -568,14 +555,16 @@ final class VrRenderer implements GLSurfaceView.Renderer, SurfaceTexture.OnFrame
         HeadPose.multiply(worldToScene, deviceToWorld, headToScene);
     }
 
-    private static int buildEyeProgram() {
+    private static int buildEyeProgram(boolean pqOutput, VrConfig config) {
         // Prefer the shader with anti-aliased screen edges; it needs derivatives, which a few old GPUs lack in
         // ESSL 1.0.
-        int p = linkProgram(EYE_VERTEX_SHADER,
-                "#extension GL_OES_standard_derivatives : require\n#define DERIVATIVES 1\n" + EYE_FRAGMENT_SHADER_BODY);
+        boolean stereo = config.stereoMode.isStereo();
+        int p = linkProgram(VrShaders.EYE_VERTEX_SHADER, VrShaders.eyeFragmentShader(pqOutput, config.picture, config.nativeColors, config.antiScreenDoor, stereo,
+                config.hqScaling, true));
         if (p == 0) {
             LimeLog.warning("VR: derivatives unavailable, screen edges won't be anti-aliased");
-            p = linkProgram(EYE_VERTEX_SHADER, EYE_FRAGMENT_SHADER_BODY);
+            p = linkProgram(VrShaders.EYE_VERTEX_SHADER, VrShaders.eyeFragmentShader(pqOutput, config.picture, config.nativeColors, config.antiScreenDoor, stereo,
+                    config.hqScaling, false));
         }
         if (p == 0) {
             throw new IllegalStateException("VR: could not build the renderer's shader");

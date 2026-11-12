@@ -37,7 +37,14 @@ public class VrConfigTest {
         assertEquals(0.4f, VrConfig.sharpnessFromPercent(40), EPS);
         assertEquals(1f, VrConfig.sharpnessFromPercent(150), EPS);
         assertEquals(0f, VrConfig.sharpnessFromPercent(-10), EPS);
-        assertEquals(1f, new VrConfig(ViewerProfile.NO_LENS, 90f, 3840, 2160, 5e-5f, 2f, true).sharpness, EPS);
+        assertEquals(1f, new VrConfig(ViewerProfile.NO_LENS, 90f, 3840, 2160, 5e-5f, 2f, true, true, null, false, null).sharpness, EPS);
+    }
+
+    @Test
+    public void stereoModeDefaultsToOff() {
+        assertEquals(StereoMode.OFF, new VrConfig(ViewerProfile.NO_LENS, 90f, 3840, 2160, 5e-5f, 0.3f, true, false, null, false, null).stereoMode);
+        assertEquals(StereoMode.TOP_BOTTOM, new VrConfig(ViewerProfile.NO_LENS, 90f, 3840, 2160, 5e-5f, 0.3f, true, false, null, false,
+                StereoMode.TOP_BOTTOM).stereoMode);
     }
 
     @Test
