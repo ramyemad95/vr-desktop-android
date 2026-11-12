@@ -506,6 +506,12 @@ public class MediaCodecHelper {
             // If this decoder officially supports FEATURE_LowLatency, we will just use that alone
             // for try 0. Otherwise, we'll include it as best effort with other options.
             if (decoderSupportsAndroidRLowLatency(decoderInfo, videoFormat.getString(MediaFormat.KEY_MIME))) {
+                // Qualcomm's low-latency decoders still set their clocks from the operating rate. Without it, on a
+                // Galaxy S22 Ultra (c2.qti.hevc.decoder.low_latency) a 1080p HDR frame took 10.8 ms on average from
+                // queueInputBuffer() to dequeueOutputBuffer() and up to 38 ms; with it, 7.1 ms and up to 24 ms.
+                if (decoderSupportsMaxOperatingRate(decoderInfo.getName())) {
+                    videoFormat.setInteger(MediaFormat.KEY_OPERATING_RATE, Short.MAX_VALUE);
+                }
                 return true;
             }
         }
