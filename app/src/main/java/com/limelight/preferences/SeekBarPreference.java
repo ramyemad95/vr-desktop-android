@@ -59,7 +59,10 @@ public class SeekBarPreference extends DialogPreference
         }
 
         // Get default, min, and max seekbar values
-        defaultValue = attrs.getAttributeIntValue(ANDROID_SCHEMA_URL, "defaultValue", PreferenceConfiguration.getDefaultBitrate(context));
+        // The default is a number, or a reference to an integer resource (the VR settings' defaults)
+        int defaultValueId = attrs.getAttributeResourceValue(ANDROID_SCHEMA_URL, "defaultValue", 0);
+        defaultValue = defaultValueId != 0 ? context.getResources().getInteger(defaultValueId) :
+                attrs.getAttributeIntValue(ANDROID_SCHEMA_URL, "defaultValue", PreferenceConfiguration.getDefaultBitrate(context));
         maxValue = attrs.getAttributeIntValue(ANDROID_SCHEMA_URL, "max", 100);
         minValue = attrs.getAttributeIntValue(SEEKBAR_SCHEMA_URL, "min", 1);
         stepSize = attrs.getAttributeIntValue(SEEKBAR_SCHEMA_URL, "step", 1);

@@ -9,12 +9,12 @@ package com.limelight.vr;
  *
  * <ol>
  *   <li>PQ to linear light, in nits.</li>
- *   <li>BT.2020 to the output's primaries, scaled so SDR reference white ({@link #SDR_WHITE_NITS}, from ITU-R
- *   BT.2408) is 1.0. The output is BT.709 (sRGB) by default, or Display P3 for "native" colors (see below). Colors
+ *   <li>BT.2020 to the output's primaries, scaled so the HDR white level ({@link PictureSettings#hdrWhiteNits},
+ *   {@link PictureSettings#STANDARD_WHITE_NITS} by default) is 1.0. The output is BT.709 (sRGB) by default, or Display P3 for "native" colors (see below). Colors
  *   outside the output's range clip to 0.</li>
- *   <li>Everything up to {@link #KNEE} passes through unchanged; above it, the brightest channel rolls off smoothly
+ *   <li>Everything up to the knee ({@link PictureSettings#hdrKnee}) passes through unchanged; above it, the brightest channel rolls off smoothly
  *   toward 1.0 and the other two are scaled with it, so hues don't shift.</li>
- *   <li>Gamma 2.2 for the SDR display.</li>
+ *   <li>The phone's gamma ({@link PictureSettings#PHONE_GAMMA}) for the SDR display.</li>
  * </ol>
  *
  * <p><b>Native colors:</b> phones with a wide-gamut panel, such as the Galaxy S22 Ultra in its "Vivid" screen mode,
@@ -23,11 +23,6 @@ package com.limelight.vr;
  * On a phone that color-manages the app as sRGB ("Natural" screen mode), these colors look too saturated.</p>
  */
 public final class HdrToneMap {
-    /** HDR reference white ("graphics white") per ITU-R BT.2408. */
-    public static final float SDR_WHITE_NITS = 203f;
-    /** Relative brightness (1.0 = SDR white) above which highlights are compressed. */
-    public static final float KNEE = 0.75f;
-
     // SMPTE ST 2084 constants
     private static final double M1 = 0.1593017578125;
     private static final double M2 = 78.84375;
@@ -72,8 +67,15 @@ public final class HdrToneMap {
             -0.0416f, 1.0388f, 0.0028f,
             -0.0221f, -0.0783f, 1.1003f,
     };
-    /** BT.2020 luminance weights. */
-    private static final float[] BT2020_LUMA = {0.2627f, 0.6780f, 0.0593f};
+    /** BT.2020 luminance weights: the HDR screen's frames. */
+    static final float[] BT2020_LUMA = {0.2627f, 0.6780f, 0.0593f};
+    /** BT.709 luminance weights: SDR frames, and HDR ones once they're tone-mapped. */
+    static final float[] BT709_LUMA = {0.2126f, 0.7152f, 0.0722f};
+
+    /** A GLSL {@code vec3} of these three values. */
+    static String glslVec3(float[] v) {
+        return "vec3(" + v[0] + ", " + v[1] + ", " + v[2] + ")";
+    }
 
     private HdrToneMap() {
     }
@@ -90,9 +92,9 @@ public final class HdrToneMap {
         return (float) Math.pow((C1 + C2 * y) / (1 + C3 * y), M2);
     }
 
-    /** The highlight roll-off applied to the brightest channel, from the standard {@link #KNEE}. */
+    /** The highlight roll-off applied to the brightest channel, from the standard knee. */
     public static float rollOff(float m) {
-        return rollOff(m, KNEE);
+        return rollOff(m, PictureSettings.STANDARD_KNEE);
     }
 
     /** The highlight roll-off applied to the brightest channel: unchanged up to {@code knee}, then toward 1.0. */
@@ -139,7 +141,7 @@ public final class HdrToneMap {
             }
         }
         for (int i = 0; i < 3; i++) {
-            rgb[i] = (float) Math.pow(rgb[i], 1 / 2.2);
+            rgb[i] = (float) Math.pow(rgb[i], 1 / PictureSettings.PHONE_GAMMA);
         }
         return rgb;
     }
@@ -165,7 +167,7 @@ public final class HdrToneMap {
                 "    if (m > " + knee + ") {\n" +
                 "        rgb *= (" + knee + " + " + (1 - knee) + " * (1.0 - exp(-(m - " + knee + ") / " + (1 - knee) + "))) / m;\n" +
                 "    }\n" +
-                "    return pow(rgb, vec3(" + (float) (1 / 2.2) + "));\n" +
+                "    return pow(rgb, vec3(" + 1 / PictureSettings.PHONE_GAMMA + "));\n" +
                 "}\n";
     }
 
@@ -182,7 +184,8 @@ public final class HdrToneMap {
     /** As {@link #sdrToPq(float, float, float, float)}; with {@code nativeColors}, the SDR values are read as Display P3. */
     public static float[] sdrToPq(float r, float g, float b, float whiteNits, boolean nativeColors) {
         float[] m = nativeColors ? DISPLAY_P3_TO_BT2020 : BT709_TO_BT2020;
-        float[] lin = {(float) Math.pow(clamp01(r), 2.2), (float) Math.pow(clamp01(g), 2.2), (float) Math.pow(clamp01(b), 2.2)};
+        float gamma = PictureSettings.PHONE_GAMMA;
+        float[] lin = {(float) Math.pow(clamp01(r), gamma), (float) Math.pow(clamp01(g), gamma), (float) Math.pow(clamp01(b), gamma)};
         float[] out = new float[3];
         for (int i = 0; i < 3; i++) {
             float v = m[i * 3] * lin[0] + m[i * 3 + 1] * lin[1] + m[i * 3 + 2] * lin[2];
@@ -201,6 +204,26 @@ public final class HdrToneMap {
      * color range ({@link #BT2020_NATIVE_STRETCH}), then the Color setting, both in linear light.
      */
     public static float[] hdrForPq(float r, float g, float b, boolean nativeColors, float saturation) {
+        return hdrForPq(r, g, b, nativeColors, new PictureSettings(PictureSettings.STANDARD_WHITE_NITS,
+                PictureSettings.STANDARD_KNEE, saturation, PictureSettings.PHONE_GAMMA));
+    }
+
+    /** The brightness (in nits) that the HDR screen's Contrast setting pivots around: 18% of the standard white. */
+    static final float HDR_CONTRAST_PIVOT_NITS = 0.18f * PictureSettings.STANDARD_WHITE_NITS;
+
+    /**
+     * An HDR pixel (PQ-coded BT.2020) for the HDR screen, all in linear light, as the shader does it:
+     * <ol>
+     *   <li>with {@code nativeColors}, colors stretched to the phone's full range ({@link #BT2020_NATIVE_STRETCH});</li>
+     *   <li>mid-tones brightened by {@link PictureSettings#hdrGain()} when the highlights are limited;</li>
+     *   <li>Contrast: the pixel's luminance raised to {@link PictureSettings#contrastExponent()} around {@link #HDR_CONTRAST_PIVOT_NITS},
+     *   keeping its color;</li>
+     *   <li>Color: saturation around the luminance;</li>
+     *   <li>HDR highlights: the brightest channel rolled off toward {@link PictureSettings#hdrPeakNits} from half
+     *   of it, the other two scaled with it.</li>
+     * </ol>
+     */
+    public static float[] hdrForPq(float r, float g, float b, boolean nativeColors, PictureSettings picture) {
         float[] lin = {pqToNits(r), pqToNits(g), pqToNits(b)};
         if (nativeColors) {
             float[] m = BT2020_NATIVE_STRETCH;
@@ -210,12 +233,34 @@ public final class HdrToneMap {
             }
             lin = stretched;
         }
-        float luma = BT2020_LUMA[0] * lin[0] + BT2020_LUMA[1] * lin[1] + BT2020_LUMA[2] * lin[2];
-        float[] out = new float[3];
+        float gain = picture.hdrGain();
+        float contrast = picture.contrastExponent();
         for (int i = 0; i < 3; i++) {
-            out[i] = nitsToPq(Math.max(luma + (lin[i] - luma) * saturation, 0f));
+            lin[i] *= gain;
         }
-        return out;
+        float luma = BT2020_LUMA[0] * lin[0] + BT2020_LUMA[1] * lin[1] + BT2020_LUMA[2] * lin[2];
+        if (contrast != 1f) {
+            float scale = (float) Math.pow(Math.max(luma, 0.01f) / HDR_CONTRAST_PIVOT_NITS, contrast - 1f);
+            for (int i = 0; i < 3; i++) {
+                lin[i] *= scale;
+            }
+            luma *= scale;
+        }
+        for (int i = 0; i < 3; i++) {
+            lin[i] = Math.max(luma + (lin[i] - luma) * picture.saturation, 0f);
+        }
+        float peak = picture.hdrPeakNits;
+        if (peak > 0f) {
+            float knee = 0.5f * peak;
+            float m = Math.max(lin[0], Math.max(lin[1], lin[2]));
+            if (m > knee) {
+                float scale = (float) (knee + (peak - knee) * (1 - Math.exp(-(m - knee) / (peak - knee)))) / m;
+                for (int i = 0; i < 3; i++) {
+                    lin[i] *= scale;
+                }
+            }
+        }
+        return new float[] {nitsToPq(lin[0]), nitsToPq(lin[1]), nitsToPq(lin[2])};
     }
 
     private static float clamp01(float v) {
@@ -224,8 +269,8 @@ public final class HdrToneMap {
 
     /**
      * GLSL ES 1.0 for the HDR screen: {@code vec3 sdrToPq(vec3 c)}, and {@code vec3 hdrForPq(vec3 pq)} which applies
-     * the Color setting to a PQ pixel (or passes it through at 100%). Same steps as {@link #sdrToPq} and
-     * {@link #saturatePq}.
+     * the picture settings to a PQ pixel (or passes it through when they're all neutral). Same steps as
+     * {@link #sdrToPq} and {@link #hdrForPq(float, float, float, boolean, PictureSettings)}.
      */
     static String pqShaderFunctions(PictureSettings picture) {
         return pqShaderFunctions(picture, false);
@@ -246,25 +291,42 @@ public final class HdrToneMap {
                 (float) M2 + "));\n" +
                 "}\n" +
                 "vec3 sdrToPq(vec3 c) {\n" +
-                "    vec3 lin = pow(clamp(c, 0.0, 1.0), vec3(2.2));\n" +
+                "    vec3 lin = pow(clamp(c, 0.0, 1.0), vec3(" + PictureSettings.PHONE_GAMMA + "));\n" +
                 // GLSL's mat3 constructor takes columns
                 "    lin = mat3(" + m[0] + ", " + m[3] + ", " + m[6] + ", " + m[1] + ", " + m[4] + ", " + m[7] + ", " +
                 m[2] + ", " + m[5] + ", " + m[8] + ") * lin;\n" +
                 "    return linearToPq(max(lin, 0.0) * " + (float) (picture.hdrWhiteNits / PQ_MAX_NITS) + ");\n" +
                 "}\n";
-        if (picture.saturation == 1f && !nativeColors) {
+        float gain = picture.hdrGain();
+        float contrast = picture.contrastExponent();
+        float peak = picture.hdrPeakNits / (float) PQ_MAX_NITS;
+        if (picture.saturation == 1f && !nativeColors && gain == 1f && contrast == 1f && peak == 0f) {
             return functions + "vec3 hdrForPq(vec3 pq) {\n    return pq;\n}\n";
         }
         float[] st = BT2020_NATIVE_STRETCH;
+        String lumaWeights = glslVec3(BT2020_LUMA);
+        // Linear light here is relative to 10000 nits
         return functions +
                 "vec3 hdrForPq(vec3 pq) {\n" +
                 "    vec3 lin = pqToLinear(pq);\n" +
                 (nativeColors ?
                         "    lin = max(mat3(" + st[0] + ", " + st[3] + ", " + st[6] + ", " + st[1] + ", " + st[4] + ", " + st[7] +
                         ", " + st[2] + ", " + st[5] + ", " + st[8] + ") * lin, 0.0);\n" : "") +
+                (gain == 1f ? "" : "    lin *= " + PictureSettings.glsl(gain) + ";\n") +
+                (contrast == 1f ? "" :
+                        "    lin *= pow(max(dot(lin, " + lumaWeights + "), 0.000001) / " +
+                        PictureSettings.glsl(HDR_CONTRAST_PIVOT_NITS / (float) PQ_MAX_NITS) + ", " +
+                        PictureSettings.glsl(contrast - 1f) + ");\n") +
                 (picture.saturation == 1f ? "" :
-                        "    float luma = dot(lin, vec3(" + BT2020_LUMA[0] + ", " + BT2020_LUMA[1] + ", " + BT2020_LUMA[2] + "));\n" +
+                        "    float luma = dot(lin, " + lumaWeights + ");\n" +
                         "    lin = max(vec3(luma) + (lin - vec3(luma)) * " + PictureSettings.glsl(picture.saturation) + ", 0.0);\n") +
+                (peak == 0f ? "" :
+                        "    float m = max(max(lin.r, lin.g), lin.b);\n" +
+                        "    if (m > " + PictureSettings.glsl(0.5f * peak) + ") {\n" +
+                        "        lin *= (" + PictureSettings.glsl(0.5f * peak) + " + " + PictureSettings.glsl(0.5f * peak) +
+                        " * (1.0 - exp(-(m - " + PictureSettings.glsl(0.5f * peak) + ") / " + PictureSettings.glsl(0.5f * peak) +
+                        "))) / m;\n" +
+                        "    }\n") +
                 "    return linearToPq(lin);\n" +
                 "}\n";
     }

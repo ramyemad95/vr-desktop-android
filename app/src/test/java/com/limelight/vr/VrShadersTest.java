@@ -48,7 +48,7 @@ public class VrShadersTest {
     public void highQualityScalingNeedsDerivativesAndTakesFourSamples() {
         String hq = VrShaders.eyeFragmentShader(false, PictureSettings.STANDARD, false, false, false, true, true);
         assertTrue(hq.contains("#define HQ_SCALING 1"));
-        assertTrue(hq.contains(String.valueOf(VrShaders.LOD_BIAS - 1f)));
+        assertTrue(hq.contains(String.valueOf(VrShaders.LOD_BIAS + VrShaders.HQ_LOD)));
         assertTrue(hq.contains(String.valueOf(VrShaders.HQ_SHARPENING)));
         // Without derivatives the four samples can't be placed: the single sample is used
         assertFalse(VrShaders.eyeFragmentShader(false, PictureSettings.STANDARD, false, false, false, true, false)
@@ -69,8 +69,25 @@ public class VrShadersTest {
         assertFalse(off.contains("#define ANTI_SCREEN_DOOR"));
         assertTrue(sdr.contains("#define ANTI_SCREEN_DOOR 1"));
         assertTrue(sdr.contains("0.7152"));
-        assertTrue(hdr.contains("#define LUMA_WEIGHTS vec3(0.2627, 0.678, 0.0593)"));
+        assertTrue(hdr.contains("#define LUMA_WEIGHTS " + HdrToneMap.glslVec3(HdrToneMap.BT2020_LUMA)));
         // The extension directive stays ahead of any code
         assertTrue(hdr.startsWith("#extension GL_OES_standard_derivatives"));
+    }
+
+    @Test
+    public void pictureSoftnessMovesEverySampleCoarser() {
+        assertEquals(VrShaders.LOD_BIAS, VrShaders.lodBias(0f), 0f);
+        assertEquals(1.1f, VrShaders.lodBias(0.8f), 1e-6f);
+        assertEquals(VrShaders.lodBias(1f), VrShaders.lodBias(3f), 0f);
+        // At no softness the shader is the one without the setting
+        assertEquals(VrShaders.eyeFragmentShader(false, PictureSettings.STANDARD, false, true, false, true, true),
+                VrShaders.eyeFragmentShader(false, PictureSettings.STANDARD, false, true, false, true, true,
+                        VrShaders.lodBias(0f), VrDebugTuning.NONE));
+        String soft = VrShaders.eyeFragmentShader(false, PictureSettings.STANDARD, false, true, false, true, true,
+                1f, VrDebugTuning.NONE);
+        // The four samples half a level finer than the bias, the wide one a level coarser
+        assertEquals(4, count(soft, ", 0.5).rgb"));
+        assertEquals(2, count(soft, "texture2D(uFrame, fuv, 2.0)"));
+        assertFalse(soft.contains(String.valueOf(VrShaders.LOD_BIAS)));
     }
 }

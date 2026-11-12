@@ -9,6 +9,7 @@ import android.opengl.GLSurfaceView;
 import android.opengl.GLUtils;
 import android.view.Surface;
 
+import com.limelight.BuildConfig;
 import com.limelight.LimeLog;
 
 import java.nio.ByteBuffer;
@@ -27,8 +28,9 @@ import javax.microedition.khronos.opengles.GL10;
  * <p>Two passes:</p>
  * <ol>
  *   <li><b>Prefilter</b>, once per decoded frame (only when one arrives): the decoder's {@link SurfaceTexture} is
- *   drawn 1:1 into an RGBA texture at the stream's resolution, HDR10 is tone-mapped to SDR on the way, and the
- *   texture's mipmaps are rebuilt. Reading the decoder's YUV texture is the expensive part, so it happens once per
+ *   drawn into an RGBA texture at the stream's resolution (or half of it, see {@link VrConfig#halveLargeFrames}),
+ *   HDR10 is tone-mapped to SDR on the way (or kept as PQ for the phone's HDR screen), and the texture's mipmaps
+ *   are rebuilt. Reading the decoder's YUV texture is the expensive part, so it happens once per
  *   video pixel per frame instead of many times per display pixel per refresh.</li>
  *   <li><b>Eyes</b>, every display refresh: each eye is one mesh that already contains the inverse lens distortion;
  *   for every pixel the fragment shader builds the view ray, rotates it by the head pose, intersects it with the
@@ -76,13 +78,25 @@ final class VrRenderer implements GLSurfaceView.Renderer, SurfaceTexture.OnFrame
     private final FloatBuffer quad = ByteBuffer.allocateDirect(QUAD.length * 4)
             .order(ByteOrder.nativeOrder()).asFloatBuffer().put(QUAD);
     private int frameTexture, frameBuffer;
+    /** The frame texture's size: the stream's, or half of it for a stream much larger than an eye's screen. */
+    private int frameWidth, frameHeight;
     private boolean frameMipmaps;
+    private float frameAnisotropyLimit;
+
+    /** Debug builds only: picture settings switched live over adb (see {@link VrDebugTuning}); null in release builds. */
+    private final VrDebugTuning.Poller debugTuningPoller = BuildConfig.DEBUG ? new VrDebugTuning.Poller() : null;
+    /** GL thread. Stays {@link VrDebugTuning#NONE}, the real settings, in release builds. */
+    private VrDebugTuning tuning = VrDebugTuning.NONE;
+    /** The eye shader the program was built from, to rebuild it only when the tuning changes it. */
+    private String debugEyeShader;
 
     private int videoTexture;
     private SurfaceTexture surfaceTexture;
     private Surface videoSurface;
     private final AtomicInteger pendingFrames = new AtomicInteger();
     private volatile FramePacer framePacer;
+    /** Frame timing log, or null: told what each refresh latched and how long each draw took. */
+    private volatile FrameLog frameLog;
     /** The view draws to a 10-bit BT.2020 PQ surface (the phone's HDR screen); set before onSurfaceCreated(). */
     private volatile boolean pqOutput;
     private volatile HdrMetadata hdrMetadata;
@@ -164,7 +178,7 @@ final class VrRenderer implements GLSurfaceView.Renderer, SurfaceTexture.OnFrame
         android.opengl.EGLDisplay display = EGL14.eglGetCurrentDisplay();
         android.opengl.EGLSurface surface = EGL14.eglGetCurrentSurface(EGL14.EGL_DRAW);
         int set = 0;
-        int[][] attributes = metadata.eglAttributes();
+        int[][] attributes = metadata.eglAttributes(Math.round(config.picture.hdrPeakNits));
         for (int[] attribute : attributes) {
             if (EGL14.eglSurfaceAttrib(display, surface, attribute[0], attribute[1])) {
                 set++;
@@ -213,23 +227,14 @@ final class VrRenderer implements GLSurfaceView.Renderer, SurfaceTexture.OnFrame
         // A new window surface needs the HDR metadata again
         appliedHdrMetadata = null;
 
+        tuning = VrDebugTuning.NONE;
+        if (debugTuningPoller != null) {
+            // The next draw applies the properties again
+            debugTuningPoller.reset();
+            debugEyeShader = debugEyeShader(tuning);
+        }
         program = buildEyeProgram(pqOutput, config);
-        aPosition = GLES20.glGetAttribLocation(program, "aPosition");
-        aTan = GLES20.glGetAttribLocation(program, "aTan");
-        uFrame = GLES20.glGetUniformLocation(program, "uFrame");
-        uEyeToScene = GLES20.glGetUniformLocation(program, "uEyeToScene");
-        uEyePos = GLES20.glGetUniformLocation(program, "uEyePos");
-        uScreenHalfSize = GLES20.glGetUniformLocation(program, "uScreenHalfSize");
-        uScreenDistance = GLES20.glGetUniformLocation(program, "uScreenDistance");
-        uMaxTan2 = GLES20.glGetUniformLocation(program, "uMaxTan2");
-        uHasFrame = GLES20.glGetUniformLocation(program, "uHasFrame");
-        uSharpness = GLES20.glGetUniformLocation(program, "uSharpness");
-        uPanelTex = GLES20.glGetUniformLocation(program, "uPanelTex");
-        uPanel = GLES20.glGetUniformLocation(program, "uPanel");
-        uPanelCenter = GLES20.glGetUniformLocation(program, "uPanelCenter");
-        uPanelHalfSize = GLES20.glGetUniformLocation(program, "uPanelHalfSize");
-        uEyeRegion = GLES20.glGetUniformLocation(program, "uEyeRegion");
-        uRegionInset = GLES20.glGetUniformLocation(program, "uRegionInset");
+        findEyeProgramLocations();
         config.stereoMode.regionInset(config.videoWidth, config.videoHeight, regionInset);
 
         prefilterProgram = linkProgram(VrShaders.QUAD_VERTEX_SHADER, VrShaders.prefilterFragmentShader(config.nativeColors, config.picture, pqOutput));
@@ -278,7 +283,7 @@ final class VrRenderer implements GLSurfaceView.Renderer, SurfaceTexture.OnFrame
     }
 
     /**
-     * The RGBA texture the prefilter draws each frame into, at the stream's resolution, and its framebuffer. Mipmaps
+     * The RGBA texture the prefilter draws each frame into, at {@link #frameTargetSize()}, and its framebuffer. Mipmaps
      * of a non-power-of-two texture need GLES 3 or OES_texture_npot; without them the eye pass still works, with
      * bilinear filtering only.
      */
@@ -289,6 +294,9 @@ final class VrRenderer implements GLSurfaceView.Renderer, SurfaceTexture.OnFrame
             extensions = "";
         }
         frameMipmaps = (version != null && version.startsWith("OpenGL ES 3")) || extensions.contains("GL_OES_texture_npot");
+        int[] size = frameTargetSize();
+        frameWidth = size[0];
+        frameHeight = size[1];
 
         int[] ids = new int[1];
         GLES20.glGenTextures(1, ids, 0);
@@ -296,11 +304,11 @@ final class VrRenderer implements GLSurfaceView.Renderer, SurfaceTexture.OnFrame
         GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, frameTexture);
         if (pqOutput) {
             // PQ needs 10 bits per channel, or smooth gradients band
-            GLES20.glTexImage2D(GLES20.GL_TEXTURE_2D, 0, GLES30.GL_RGB10_A2, config.videoWidth, config.videoHeight, 0,
+            GLES20.glTexImage2D(GLES20.GL_TEXTURE_2D, 0, GLES30.GL_RGB10_A2, frameWidth, frameHeight, 0,
                     GLES20.GL_RGBA, GLES30.GL_UNSIGNED_INT_2_10_10_10_REV, null);
         }
         else {
-            GLES20.glTexImage2D(GLES20.GL_TEXTURE_2D, 0, GLES20.GL_RGBA, config.videoWidth, config.videoHeight, 0,
+            GLES20.glTexImage2D(GLES20.GL_TEXTURE_2D, 0, GLES20.GL_RGBA, frameWidth, frameHeight, 0,
                     GLES20.GL_RGBA, GLES20.GL_UNSIGNED_BYTE, null);
         }
         GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_MIN_FILTER,
@@ -309,10 +317,11 @@ final class VrRenderer implements GLSurfaceView.Renderer, SurfaceTexture.OnFrame
         GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_WRAP_S, GLES20.GL_CLAMP_TO_EDGE);
         GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_WRAP_T, GLES20.GL_CLAMP_TO_EDGE);
         float anisotropy = 1f;
+        frameAnisotropyLimit = tuning.anisotropy(MAX_ANISOTROPY);
         if (frameMipmaps && extensions.contains("GL_EXT_texture_filter_anisotropic")) {
             float[] max = new float[1];
             GLES20.glGetFloatv(GL_MAX_TEXTURE_MAX_ANISOTROPY_EXT, max, 0);
-            anisotropy = Math.min(MAX_ANISOTROPY, max[0]);
+            anisotropy = Math.min(tuning.anisotropy(MAX_ANISOTROPY), max[0]);
             GLES20.glTexParameterf(GLES20.GL_TEXTURE_2D, GL_TEXTURE_MAX_ANISOTROPY_EXT, anisotropy);
         }
         if (frameMipmaps) {
@@ -331,10 +340,12 @@ final class VrRenderer implements GLSurfaceView.Renderer, SurfaceTexture.OnFrame
             throw new IllegalStateException("VR: frame buffer incomplete: 0x" + Integer.toHexString(status));
         }
         LimeLog.info("VR: prefiltered frame " + config.videoWidth + "x" + config.videoHeight +
+                (frameWidth != config.videoWidth ? " at " + frameWidth + "x" + frameHeight : "") +
                 (frameMipmaps ? ", mipmaps, anisotropy " + anisotropy : ", no mipmaps (" + version + ")") +
                 (pqOutput ? ", HDR screen (10-bit BT.2020 PQ), colors " + (config.nativeColors ? "native (stretched)" : "accurate") :
                         ", HDR colors " + (config.nativeColors ? "native (Display P3)" : "sRGB")) + ", " + config.picture +
                 (config.antiScreenDoor ? ", anti screen-door" : "") + (config.hqScaling ? ", high-quality scaling" : "") +
+                ", softness " + Math.round(config.softness * 100) + "%" +
                 (config.stereoMode.isStereo() ? ", " + config.stereoMode.label() : ""));
     }
 
@@ -361,6 +372,11 @@ final class VrRenderer implements GLSurfaceView.Renderer, SurfaceTexture.OnFrame
         framePacer = pacer;
     }
 
+    /** Frame timing log: reports what each refresh latched and how long it took to draw, or null for none. */
+    void setFrameLog(FrameLog log) {
+        frameLog = log;
+    }
+
     /** The length of a display refresh, measured between draws (they're paced by the display). */
     private void measureRefresh(long now) {
         if (lastDrawNanos != 0) {
@@ -375,8 +391,20 @@ final class VrRenderer implements GLSurfaceView.Renderer, SurfaceTexture.OnFrame
     @Override
     public void onDrawFrame(GL10 unused) {
         long now = System.nanoTime();
+        drawFrame(now);
+        FrameLog log = frameLog;
+        if (log != null) {
+            FramePacer pacer = framePacer;
+            log.drawn(now, System.nanoTime(), refreshNanos, pacer != null ? pacer.heldFrames() : -1);
+        }
+    }
+
+    private void drawFrame(long now) {
         measureRefresh(now);
         applyHdrMetadata();
+        if (debugTuningPoller != null) {
+            applyDebugTuning(now);
+        }
         // Latch every frame the decoder queued since the last draw; the last one wins. Head motion is
         // drawn at the display's refresh rate even when the desktop isn't changing.
         int frames = pendingFrames.getAndSet(0);
@@ -388,6 +416,11 @@ final class VrRenderer implements GLSurfaceView.Renderer, SurfaceTexture.OnFrame
             surfaceTexture.getTransformMatrix(texMatrix);
             prefilterFrame();
             hasFrame = true;
+        }
+        FrameLog log = frameLog;
+        if (log != null) {
+            // Before the pacer sends the next frame: the surface's timestamp is the render time it was sent with
+            log.latched(now, frames, frames > 0 && surfaceTexture != null ? surfaceTexture.getTimestamp() : 0);
         }
         // Smooth video: only now, after the last frame sent was latched, send the one due next. The decoder's
         // surface keeps only its newest frame, so sending one before the previous was latched would lose that one.
@@ -421,7 +454,7 @@ final class VrRenderer implements GLSurfaceView.Renderer, SurfaceTexture.OnFrame
         float maxTan = (float) Math.tan(Math.toRadians(config.viewer.halfFovDegrees));
         GLES20.glUniform1f(uMaxTan2, maxTan * maxTan);
         GLES20.glUniform1f(uHasFrame, hasFrame ? 1f : 0f);
-        GLES20.glUniform1f(uSharpness, config.sharpness);
+        GLES20.glUniform1f(uSharpness, tuning.sharpnessUniform(config.sharpness));
         GLES20.glUniform2f(uRegionInset, regionInset[0], regionInset[1]);
         GLES20.glUniform1i(uPanelTex, 1);
         if (statsPanel != null) {
@@ -477,7 +510,7 @@ final class VrRenderer implements GLSurfaceView.Renderer, SurfaceTexture.OnFrame
     /** Draws the latest decoded frame into the RGBA frame texture (tone-mapping HDR10) and rebuilds its mipmaps. */
     private void prefilterFrame() {
         GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, frameBuffer);
-        GLES20.glViewport(0, 0, config.videoWidth, config.videoHeight);
+        GLES20.glViewport(0, 0, frameWidth, frameHeight);
         GLES20.glUseProgram(prefilterProgram);
         GLES20.glActiveTexture(GLES20.GL_TEXTURE0);
         GLES20.glBindTexture(GLES11Ext.GL_TEXTURE_EXTERNAL_OES, videoTexture);
@@ -545,6 +578,11 @@ final class VrRenderer implements GLSurfaceView.Renderer, SurfaceTexture.OnFrame
     }
 
     private void updateHeadPose() {
+        if (tuning.freezePose) {
+            // Debug builds: straight at the screen's centre, whatever the phone's orientation, for repeatable screenshots
+            System.arraycopy(HeadPose.identity(), 0, headToScene, 0, 9);
+            return;
+        }
         if (!tracker.getDeviceToWorld(displayRotation, deviceToWorld)) {
             return;
         }
@@ -555,19 +593,102 @@ final class VrRenderer implements GLSurfaceView.Renderer, SurfaceTexture.OnFrame
         HeadPose.multiply(worldToScene, deviceToWorld, headToScene);
     }
 
+    /** The eye program's attribute and uniform locations, after it was built or rebuilt. */
+    private void findEyeProgramLocations() {
+        aPosition = GLES20.glGetAttribLocation(program, "aPosition");
+        aTan = GLES20.glGetAttribLocation(program, "aTan");
+        uFrame = GLES20.glGetUniformLocation(program, "uFrame");
+        uEyeToScene = GLES20.glGetUniformLocation(program, "uEyeToScene");
+        uEyePos = GLES20.glGetUniformLocation(program, "uEyePos");
+        uScreenHalfSize = GLES20.glGetUniformLocation(program, "uScreenHalfSize");
+        uScreenDistance = GLES20.glGetUniformLocation(program, "uScreenDistance");
+        uMaxTan2 = GLES20.glGetUniformLocation(program, "uMaxTan2");
+        uHasFrame = GLES20.glGetUniformLocation(program, "uHasFrame");
+        uSharpness = GLES20.glGetUniformLocation(program, "uSharpness");
+        uPanelTex = GLES20.glGetUniformLocation(program, "uPanelTex");
+        uPanel = GLES20.glGetUniformLocation(program, "uPanel");
+        uPanelCenter = GLES20.glGetUniformLocation(program, "uPanelCenter");
+        uPanelHalfSize = GLES20.glGetUniformLocation(program, "uPanelHalfSize");
+        uEyeRegion = GLES20.glGetUniformLocation(program, "uEyeRegion");
+        uRegionInset = GLES20.glGetUniformLocation(program, "uRegionInset");
+    }
+
+    /**
+     * Debug builds: reads the debug.vrdesktop.* properties about twice a second and, when they changed, rebuilds
+     * what they affect: the eye program, and the frame texture for frame_half and aniso.
+     */
+    private void applyDebugTuning(long now) {
+        VrDebugTuning changed = debugTuningPoller.poll(now);
+        if (changed == null) {
+            return;
+        }
+        tuning = changed;
+        String result = "";
+        String shader = debugEyeShader(changed);
+        if (!shader.equals(debugEyeShader)) {
+            int p = tryBuildEyeProgram(pqOutput, config, changed);
+            if (p != 0) {
+                GLES20.glDeleteProgram(program);
+                program = p;
+                findEyeProgramLocations();
+                debugEyeShader = shader;
+                result = ", shader rebuilt";
+            }
+            else {
+                result = ", shader FAILED (still the previous one)";
+            }
+        }
+        int[] size = frameTargetSize();
+        if (size[0] != frameWidth || size[1] != frameHeight || changed.anisotropy(MAX_ANISOTROPY) != frameAnisotropyLimit) {
+            GLES20.glDeleteFramebuffers(1, new int[] {frameBuffer}, 0);
+            GLES20.glDeleteTextures(1, new int[] {frameTexture}, 0);
+            createFrameTarget();
+            if (hasFrame) {
+                // The decoder's texture still holds the last frame: a still desktop may not send another for a while
+                GLES20.glActiveTexture(GLES20.GL_TEXTURE0);
+                prefilterFrame();
+            }
+            result += ", frame texture recreated";
+        }
+        LimeLog.info("VR: debug tuning " + changed + ": frame " + frameWidth + "x" + frameHeight +
+                ", anisotropy up to " + frameAnisotropyLimit + result);
+    }
+
+    /** What the eye program is built from with this tuning; compared to tell whether it has to be rebuilt. */
+    private String debugEyeShader(VrDebugTuning t) {
+        return VrShaders.eyeFragmentShader(pqOutput, config.picture, config.nativeColors, config.antiScreenDoor,
+                config.stereoMode.isStereo(), config.hqScaling, true, VrShaders.lodBias(config.softness), t);
+    }
+
+    /** The frame texture's size: see {@link VrConfig#frameTargetSize}, or what a debug build's frame_half forces. */
+    private int[] frameTargetSize() {
+        android.util.DisplayMetrics metrics = android.content.res.Resources.getSystem().getDisplayMetrics();
+        int[] size = config.halveLargeFrames ?
+                VrConfig.frameTargetSize(config.videoWidth, config.videoHeight,
+                        Math.max(metrics.widthPixels, metrics.heightPixels) / 2, config.stereoMode.isStereo()) :
+                new int[] {config.videoWidth, config.videoHeight};
+        return tuning.frameSize(size, config.videoWidth, config.videoHeight);
+    }
+
     private static int buildEyeProgram(boolean pqOutput, VrConfig config) {
+        int p = tryBuildEyeProgram(pqOutput, config, VrDebugTuning.NONE);
+        if (p == 0) {
+            throw new IllegalStateException("VR: could not build the renderer's shader");
+        }
+        return p;
+    }
+
+    /** @return the program, or 0 if neither shader compiles */
+    private static int tryBuildEyeProgram(boolean pqOutput, VrConfig config, VrDebugTuning tuning) {
         // Prefer the shader with anti-aliased screen edges; it needs derivatives, which a few old GPUs lack in
         // ESSL 1.0.
         boolean stereo = config.stereoMode.isStereo();
         int p = linkProgram(VrShaders.EYE_VERTEX_SHADER, VrShaders.eyeFragmentShader(pqOutput, config.picture, config.nativeColors, config.antiScreenDoor, stereo,
-                config.hqScaling, true));
+                config.hqScaling, true, VrShaders.lodBias(config.softness), tuning));
         if (p == 0) {
             LimeLog.warning("VR: derivatives unavailable, screen edges won't be anti-aliased");
             p = linkProgram(VrShaders.EYE_VERTEX_SHADER, VrShaders.eyeFragmentShader(pqOutput, config.picture, config.nativeColors, config.antiScreenDoor, stereo,
-                    config.hqScaling, false));
-        }
-        if (p == 0) {
-            throw new IllegalStateException("VR: could not build the renderer's shader");
+                    config.hqScaling, false, VrShaders.lodBias(config.softness), tuning));
         }
         return p;
     }

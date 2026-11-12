@@ -33,6 +33,9 @@ adds:
   space; "Auto" converts them to sRGB.
 - **FC 27 mode**: a fixed 1080p HDR stream from the start, for EA SPORTS FC 27, with no reconnects when the game
   starts or ends.
+- **Frame timing log**: every frame's way from the PC's capture to the phone's screen, with a cause named for each
+  stutter (the PC, the network, the phone's decoder or its drawing), the phone's temperatures and, with the host
+  app, the game's own frame times on the PC. See [docs/FRAME-LOG.md](docs/FRAME-LOG.md).
 - **Its own app ID** (`io.github.ramyemad95.vrdesktop`) and name, so it installs next to the real Moonlight.
 
 ```
@@ -67,6 +70,7 @@ The APK is written to `app/build/outputs/apk/nonRoot/debug/`. Every push also bu
 | `app/` (everything else) | Moonlight Android |
 | `docs/` | Mac setup, protocol notes, VR renderer design |
 | `scripts/update-moonlight.sh` | Pulls newer Moonlight releases into this fork |
+| `scripts/pull-frame-logs.sh`, `scripts/analyze-frame-log.py` | Copy the phone's frame logs and report where stutter comes from |
 
 ## Updating Moonlight
 The fork keeps Moonlight's history, so upstream fixes merge normally. See `scripts/update-moonlight.sh`.

@@ -9,13 +9,31 @@ final class VrShaders {
     }
 
     /**
-     * Mip level bias for the frame. Trilinear filtering picks a level whose texels match the pixel's footprint and
-     * then blends, which is softer than a box over the footprint; half a level sharper keeps text crisp without
-     * visible shimmer.
+     * Mip level bias for the frame at a Picture softness of 0, the sharpest the setting goes ({@link #lodBias} adds
+     * the setting). Trilinear filtering picks a level whose texels match the pixel's footprint and then blends,
+     * which is softer than a box over the footprint; half a level sharper keeps text crisp without visible shimmer.
      */
     static final float LOD_BIAS = -0.5f;
-    /** Sharpening that high-quality scaling adds by itself, on top of the Sharpness setting. */
-    static final float HQ_SHARPENING = 0.25f;
+    /**
+     * Sharpening that high-quality scaling adds by itself, on top of the Sharpness setting: none. It was 0.25 until
+     * a side-by-side test in the headset, where the picture without it won; debug builds can still set it
+     * ({@link VrDebugTuning}).
+     */
+    static final float HQ_SHARPENING = 0f;
+    /**
+     * Mip level offset of high-quality scaling's four samples, on top of the frame's bias. Half a level finer: a
+     * whole level (the first tuning) left gaps between the samples, which showed as shimmer on fine detail.
+     */
+    static final float HQ_LOD = -0.5f;
+    /** How far apart high-quality scaling's four samples are, as a multiple of their rotated-grid offsets. */
+    static final float HQ_SPREAD = 1f;
+    /** How many mip levels the Picture softness setting adds to {@link #LOD_BIAS} at 100%. */
+    static final float SOFTNESS_LOD_RANGE = 2f;
+
+    /** The frame's mip level bias for a Picture softness of 0 (as sharp as it goes) to 1. */
+    static float lodBias(float softness) {
+        return LOD_BIAS + SOFTNESS_LOD_RANGE * Math.max(0f, Math.min(1f, softness));
+    }
 
     static final String PRECISION =
             "#ifdef GL_FRAGMENT_PRECISION_HIGH\n" +
@@ -92,7 +110,7 @@ final class VrShaders {
     /** Where the HDR screen's color functions go in the eye shader (after the declarations, before main). */
     private static final String PQ_FUNCTIONS_PLACEHOLDER = "// PQ functions\n";
 
-    private static final String EYE_FRAGMENT_SHADER_BODY =
+    private static final String EYE_FRAGMENT_SHADER_HEAD =
             PRECISION +
             "uniform sampler2D uFrame;\n" +
             "uniform mat3 uEyeToScene;\n" +
@@ -134,40 +152,52 @@ final class VrShaders {
             "    vec2 fuv = uEyeRegion.xy + clamp(uv, uRegionInset, 1.0 - uRegionInset) * uEyeRegion.zw;\n" +
             "#else\n" +
             "    vec2 fuv = uv;\n" +
-            "#endif\n" +
+            "#endif\n";
+
+    /**
+     * The part of the eye shader that reads the frame at {@code fuv} into {@code vec3 screen}. The numbers are
+     * parameters only for {@link VrDebugTuning}; everything else passes the constants above.
+     *
+     * @param sharpness the GLSL expression for the Sharpness setting
+     */
+    private static String frameSampling(float lodBias, float hqLod, float hqSharpening, float hqSpread, String sharpness) {
+        float near = 0.125f * hqSpread, far = 0.375f * hqSpread;
+        return
             // The frame has mipmaps, so it's sampled for every pixel, in uniform control flow, where the hardware
             // can pick the level from the coordinate's derivatives. Outside the screen the result is unused.
             "#ifdef HQ_SCALING\n" +
-            // High-quality scaling: four samples on a rotated grid inside the pixel's footprint, each one mip level
-            // finer than a single sample would use, then a fixed amount of sharpening. One sample half a level sharp
-            // (the default) keeps detail but aliases; this is closer to a careful (Lanczos) downscale: 3.3% error
-            // against 6.4% for a 1080p stream on a 60 degree screen, 5.7% against 6.9% for 4K, in a CPU simulation.
+            // High-quality scaling: four samples on a rotated grid inside the pixel's footprint, each HQ_LOD mip
+            // levels finer than a single sample would use, plus HQ_SHARPENING of sharpening. One sample alone
+            // keeps detail but aliases; four are closer to a careful (Lanczos) downscale.
             "    vec2 du = dFdx(fuv);\n" +
             "    vec2 dv = dFdy(fuv);\n" +
-            "    vec3 screen = 0.25 * (texture2D(uFrame, fuv + 0.125 * du + 0.375 * dv, " + (LOD_BIAS - 1f) + ").rgb +\n" +
-            "            texture2D(uFrame, fuv - 0.375 * du + 0.125 * dv, " + (LOD_BIAS - 1f) + ").rgb +\n" +
-            "            texture2D(uFrame, fuv - 0.125 * du - 0.375 * dv, " + (LOD_BIAS - 1f) + ").rgb +\n" +
-            "            texture2D(uFrame, fuv + 0.375 * du - 0.125 * dv, " + (LOD_BIAS - 1f) + ").rgb);\n" +
-            "    float sharpen = uSharpness + " + HQ_SHARPENING + ";\n" +
+            "    vec3 screen = 0.25 * (texture2D(uFrame, fuv + " + near + " * du + " + far + " * dv, " + (lodBias + hqLod) + ").rgb +\n" +
+            "            texture2D(uFrame, fuv - " + far + " * du + " + near + " * dv, " + (lodBias + hqLod) + ").rgb +\n" +
+            "            texture2D(uFrame, fuv - " + near + " * du - " + far + " * dv, " + (lodBias + hqLod) + ").rgb +\n" +
+            "            texture2D(uFrame, fuv + " + far + " * du - " + near + " * dv, " + (lodBias + hqLod) + ").rgb);\n" +
+            "    float sharpen = " + sharpness + " + " + hqSharpening + ";\n" +
             "#else\n" +
-            "    vec3 screen = texture2D(uFrame, fuv, " + LOD_BIAS + ").rgb;\n" +
-            "    float sharpen = uSharpness;\n" +
+            "    vec3 screen = texture2D(uFrame, fuv, " + lodBias + ").rgb;\n" +
+            "    float sharpen = " + sharpness + ";\n" +
             "#endif\n" +
             "#ifdef ANTI_SCREEN_DOOR\n" +
             // Anti screen-door: brightness detail from the sharp sample, color from the next mip level. The Galaxy
             // S22 Ultra's diamond PenTile panel has half as many red and blue subpixels as green ones, so sharp color
             // detail sparkles and shows a colored mesh through the lenses; brightness (mostly green) stays sharp.
             // Sharpness then applies to brightness only, which also avoids color halos.
-            "    vec3 wide = texture2D(uFrame, fuv, " + (LOD_BIAS + 1f) + ").rgb;\n" +
+            "    vec3 wide = texture2D(uFrame, fuv, " + (lodBias + 1f) + ").rgb;\n" +
             "    float detail = dot(screen - wide, LUMA_WEIGHTS);\n" +
             "    screen = clamp(wide + vec3(detail * (1.0 + sharpen)), 0.0, 1.0);\n" +
             "#else\n" +
             // Unsharp mask against the next mip level: the lens and the downscale both soften text.
             "    if (sharpen > 0.0) {\n" +
-            "        vec3 wide = texture2D(uFrame, fuv, " + (LOD_BIAS + 1f) + ").rgb;\n" +
+            "        vec3 wide = texture2D(uFrame, fuv, " + (lodBias + 1f) + ").rgb;\n" +
             "        screen = clamp(screen + sharpen * (screen - wide), 0.0, 1.0);\n" +
             "    }\n" +
-            "#endif\n" +
+            "#endif\n";
+    }
+
+    private static final String EYE_FRAGMENT_SHADER_TAIL =
             "    if (uHasFrame < 0.5) {\n" +
             "        screen = vec3(0.10, 0.10, 0.12);\n" +
             "#ifdef PQ_OUTPUT\n" +
@@ -207,14 +237,59 @@ final class VrShaders {
      */
     static String eyeFragmentShader(boolean pqOutput, PictureSettings picture, boolean nativeColors,
                                     boolean antiScreenDoor, boolean stereo, boolean hqScaling, boolean derivatives) {
+        return eyeFragmentShader(pqOutput, picture, nativeColors, antiScreenDoor, stereo, hqScaling, derivatives,
+                LOD_BIAS, VrDebugTuning.NONE);
+    }
+
+    /**
+     * The eye shader with a debug build's live tuning (see {@link VrDebugTuning}); with {@link VrDebugTuning#NONE}
+     * it is the settings' shader exactly. {@code antiScreenDoor}, {@code hqScaling} and {@code lodBias} (from the
+     * Picture softness setting, see {@link #lodBias}) are the real settings.
+     */
+    static String eyeFragmentShader(boolean pqOutput, PictureSettings picture, boolean nativeColors,
+                                    boolean antiScreenDoor, boolean stereo, boolean hqScaling, boolean derivatives,
+                                    float lodBias, VrDebugTuning tuning) {
+        String tuned = frameSampling(tuning.lodBias(lodBias), tuning.hqLod(), tuning.hqSharpening(), tuning.hqSpread(),
+                tuning.split && !Float.isNaN(tuning.sharp) ? String.valueOf(tuning.sharp) : "uSharpness");
+        String sampling = tuned;
+        boolean split = tuning.split;
+        if (split) {
+            // Debug split view: the real settings on the screen's left half, the tuned ones on its right half.
+            // Both are computed for every pixel (texture reads must stay in uniform control flow), each in its own
+            // block with its own HQ_SCALING and ANTI_SCREEN_DOOR.
+            sampling = "    vec3 screenA;\n" +
+                    "    vec3 screenB;\n" +
+                    samplingDefines(hqScaling && derivatives, antiScreenDoor) +
+                    "    {\n" +
+                    frameSampling(lodBias, HQ_LOD, HQ_SHARPENING, HQ_SPREAD, "uSharpness") +
+                    "    screenA = screen;\n" +
+                    "    }\n" +
+                    samplingDefines(tuning.hq(hqScaling) && derivatives, tuning.asd(antiScreenDoor)) +
+                    "    {\n" +
+                    tuned +
+                    "    screenB = screen;\n" +
+                    "    }\n" +
+                    "    vec3 screen = uv.x < 0.5 ? screenA : screenB;\n";
+        }
+        else {
+            antiScreenDoor = tuning.asd(antiScreenDoor);
+            hqScaling = tuning.hq(hqScaling);
+        }
+        String eyeBody = EYE_FRAGMENT_SHADER_HEAD + sampling + EYE_FRAGMENT_SHADER_TAIL;
         String body = pqOutput ?
-                "#define PQ_OUTPUT 1\n" + EYE_FRAGMENT_SHADER_BODY.replace(PQ_FUNCTIONS_PLACEHOLDER,
+                "#define PQ_OUTPUT 1\n" + eyeBody.replace(PQ_FUNCTIONS_PLACEHOLDER,
                         HdrToneMap.pqShaderFunctions(picture, nativeColors)) :
-                EYE_FRAGMENT_SHADER_BODY;
+                eyeBody;
+        if (split) {
+            // The blocks define ANTI_SCREEN_DOOR and HQ_SCALING themselves
+            body = "#define LUMA_WEIGHTS " +
+                    lumaWeights(pqOutput) + "\n" + body;
+            antiScreenDoor = false;
+            hqScaling = false;
+        }
         if (antiScreenDoor) {
-            // Luminance weights of the frame's colors: BT.2020 on the HDR screen, BT.709 otherwise
             body = "#define ANTI_SCREEN_DOOR 1\n#define LUMA_WEIGHTS " +
-                    (pqOutput ? "vec3(0.2627, 0.678, 0.0593)" : "vec3(0.2126, 0.7152, 0.0722)") + "\n" + body;
+                    lumaWeights(pqOutput) + "\n" + body;
         }
         if (stereo) {
             body = "#define STEREO_3D 1\n" + body;
@@ -224,5 +299,17 @@ final class VrShaders {
             body = "#define HQ_SCALING 1\n" + body;
         }
         return derivatives ? "#extension GL_OES_standard_derivatives : require\n#define DERIVATIVES 1\n" + body : body;
+    }
+
+    /** Luminance weights of the frame's colors: BT.2020 on the HDR screen, BT.709 otherwise. */
+    private static String lumaWeights(boolean pqOutput) {
+        return HdrToneMap.glslVec3(pqOutput ? HdrToneMap.BT2020_LUMA : HdrToneMap.BT709_LUMA);
+    }
+
+    /** Debug split view: sets HQ_SCALING and ANTI_SCREEN_DOOR for the block that follows. */
+    private static String samplingDefines(boolean hqScaling, boolean antiScreenDoor) {
+        return "#undef HQ_SCALING\n#undef ANTI_SCREEN_DOOR\n" +
+                (hqScaling ? "#define HQ_SCALING 1\n" : "") +
+                (antiScreenDoor ? "#define ANTI_SCREEN_DOOR 1\n" : "");
     }
 }

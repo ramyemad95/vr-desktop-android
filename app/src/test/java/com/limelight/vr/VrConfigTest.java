@@ -1,6 +1,9 @@
 package com.limelight.vr;
 
+import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.assertSame;
 
 import org.junit.Test;
@@ -37,14 +40,13 @@ public class VrConfigTest {
         assertEquals(0.4f, VrConfig.sharpnessFromPercent(40), EPS);
         assertEquals(1f, VrConfig.sharpnessFromPercent(150), EPS);
         assertEquals(0f, VrConfig.sharpnessFromPercent(-10), EPS);
-        assertEquals(1f, new VrConfig(ViewerProfile.NO_LENS, 90f, 3840, 2160, 5e-5f, 2f, true, true, null, false, null).sharpness, EPS);
+        assertEquals(1f, config(2f, null, 0f, false).sharpness, EPS);
     }
 
     @Test
     public void stereoModeDefaultsToOff() {
-        assertEquals(StereoMode.OFF, new VrConfig(ViewerProfile.NO_LENS, 90f, 3840, 2160, 5e-5f, 0.3f, true, false, null, false, null).stereoMode);
-        assertEquals(StereoMode.TOP_BOTTOM, new VrConfig(ViewerProfile.NO_LENS, 90f, 3840, 2160, 5e-5f, 0.3f, true, false, null, false,
-                StereoMode.TOP_BOTTOM).stereoMode);
+        assertEquals(StereoMode.OFF, config(0.3f, null, 0f, false).stereoMode);
+        assertEquals(StereoMode.TOP_BOTTOM, config(0.3f, StereoMode.TOP_BOTTOM, 0f, false).stereoMode);
     }
 
     @Test
@@ -75,5 +77,41 @@ public class VrConfigTest {
         assertSame(ViewerProfile.NO_LENS, ViewerProfile.fromPreference("none"));
         assertSame(ViewerProfile.CARDOO_VR_GO, ViewerProfile.fromPreference("cardoo_vr_go"));
         assertSame(ViewerProfile.CARDBOARD_V2, ViewerProfile.fromPreference(null));
+    }
+
+    @Test
+    public void largeStreamsArePrefilteredAtHalfSize() {
+        // Galaxy S22 Ultra at WQHD+: each eye is 1544 pixels wide
+        assertArrayEquals(new int[] {1920, 1080}, VrConfig.frameTargetSize(3840, 2160, 1544, false));
+        // Already close to what the eye can show: kept
+        assertArrayEquals(new int[] {2560, 1440}, VrConfig.frameTargetSize(2560, 1440, 1544, false));
+        assertArrayEquals(new int[] {1920, 1080}, VrConfig.frameTargetSize(1920, 1080, 1544, false));
+        // 3D modes give each eye half the frame, so it keeps every pixel
+        assertArrayEquals(new int[] {3840, 2160}, VrConfig.frameTargetSize(3840, 2160, 1544, true));
+        // Only one halving, and never for odd sizes or an unknown screen
+        assertArrayEquals(new int[] {3840, 2160}, VrConfig.frameTargetSize(7680, 4320, 1544, false));
+        assertArrayEquals(new int[] {3841, 2160}, VrConfig.frameTargetSize(3841, 2160, 1544, false));
+        assertArrayEquals(new int[] {3840, 2160}, VrConfig.frameTargetSize(3840, 2160, 0, false));
+        // A phone whose eye is wider than half the stream keeps the stream's size
+        assertArrayEquals(new int[] {3840, 2160}, VrConfig.frameTargetSize(3840, 2160, 1920, false));
+    }
+
+    @Test
+    public void softnessIsClamped() {
+        assertEquals(0.8f, VrConfig.softnessFromPercent(80), 0f);
+        assertEquals(1f, VrConfig.softnessFromPercent(250), 0f);
+        assertEquals(0f, VrConfig.softnessFromPercent(-5), 0f);
+        assertEquals(0.8f, config(0.3f, StereoMode.OFF, 0.8f, true).softness, 0f);
+        assertEquals(1f, config(0.3f, StereoMode.OFF, 3f, true).softness, 0f);
+        assertTrue(config(0.3f, StereoMode.OFF, 0.8f, true).halveLargeFrames);
+        VrConfig soft = config(0.3f, StereoMode.OFF, Float.NaN, false);
+        assertEquals(0f, soft.softness, 0f);
+        assertFalse(soft.halveLargeFrames);
+    }
+
+    /** A config with the values these tests don't look at filled in. */
+    private static VrConfig config(float sharpness, StereoMode stereoMode, float softness, boolean halveLargeFrames) {
+        return new VrConfig(ViewerProfile.NO_LENS, 90f, 3840, 2160, 5e-5f, sharpness, true, false, null, false,
+                stereoMode, false, softness, halveLargeFrames);
     }
 }

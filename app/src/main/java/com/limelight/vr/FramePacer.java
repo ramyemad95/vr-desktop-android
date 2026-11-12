@@ -34,29 +34,36 @@ public final class FramePacer {
         /** Renders this decoded frame to the VR view's surface now. */
         void show(int index);
 
-        /** Gives this decoded frame back to the decoder without showing it. */
-        void drop(int index);
+        /**
+         * Gives this decoded frame back to the decoder without showing it.
+         *
+         * @param overflow true if more frames waited than the buffer holds; false if a newer frame was due at the
+         *                 same refresh
+         */
+        void drop(int index, boolean overflow);
     }
 
     /** How far back the fastest frame is looked for. Long enough to see a fast frame between hiccups. */
     static final long OFFSET_WINDOW_NS = 2_000_000_000L;
+    /** The largest buffer the Smooth video setting offers, in frames. */
+    public static final int MAX_BUFFER_FRAMES = 2;
     /** Frames held beyond the buffer before the oldest are dropped, which bounds the delay and feeds the decoder. */
     static final int MAX_EXTRA_FRAMES = 1;
     /** A jump in PC time larger than this (or backwards) means a new time base: the offsets start over. */
-    private static final long PC_TIME_JUMP_NS = 1_000_000_000L;
+    static final long PC_TIME_JUMP_NS = 1_000_000_000L;
 
     private final long bufferNs;
     private final int maxHeld;
 
     /** Decoded frames waiting to be shown, oldest first: {decoder output buffer index, PC time in ns}. */
     private final ArrayDeque<long[]> held = new ArrayDeque<>();
-    /** Sliding-window minimum of (decode time - PC time): increasing offsets, oldest first: {decode time, offset}. */
-    private final ArrayDeque<long[]> offsets = new ArrayDeque<>();
+    /** The smallest (decode time - PC time) of the last {@link #OFFSET_WINDOW_NS}: the fastest frame lately. */
+    private final WindowMin offsets = new WindowMin(OFFSET_WINDOW_NS);
     private long lastPcNs = Long.MIN_VALUE;
     private Output output;
 
     /**
-     * @param bufferFrames frames of delay that absorb late frames (1 or 2)
+     * @param bufferFrames frames of delay that absorb late frames (1 to {@link #MAX_BUFFER_FRAMES})
      * @param fps the stream's frame rate, which sets the length of a frame
      */
     public FramePacer(int bufferFrames, int fps) {
@@ -89,18 +96,11 @@ public final class FramePacer {
         }
         lastPcNs = pcNs;
 
-        long offset = nowNs - pcNs;
-        while (!offsets.isEmpty() && offsets.peekLast()[1] >= offset) {
-            offsets.pollLast();
-        }
-        offsets.addLast(new long[] {nowNs, offset});
-        while (offsets.peekFirst()[0] < nowNs - OFFSET_WINDOW_NS) {
-            offsets.pollFirst();
-        }
+        offsets.add(nowNs, nowNs - pcNs);
 
         held.addLast(new long[] {index, pcNs});
         while (held.size() > maxHeld) {
-            drop(held.pollFirst());
+            drop(held.pollFirst(), true);
         }
     }
 
@@ -116,13 +116,13 @@ public final class FramePacer {
         if (held.isEmpty() || offsets.isEmpty()) {
             return false;
         }
-        long offset = offsets.peekFirst()[1];
+        long offset = offsets.min();
         // A frame goes out at the refresh nearest the time it's due
         long deadline = nowNs + refreshNs / 2;
         long[] newestDue = null;
         while (!held.isEmpty() && held.peekFirst()[1] + offset + bufferNs <= deadline) {
             if (newestDue != null) {
-                drop(newestDue);
+                drop(newestDue, false);
             }
             newestDue = held.pollFirst();
         }
@@ -142,13 +142,13 @@ public final class FramePacer {
         lastPcNs = Long.MIN_VALUE;
     }
 
-    private void drop(long[] frame) {
+    private void drop(long[] frame, boolean overflow) {
         if (output != null) {
-            output.drop((int) frame[0]);
+            output.drop((int) frame[0], overflow);
         }
     }
 
-    /** Frames held now, for tests. */
+    /** Frames held now (for the frame log and tests). */
     synchronized int heldFrames() {
         return held.size();
     }

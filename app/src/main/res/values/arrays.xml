@@ -338,6 +338,18 @@
         <item>59.5</item>
         <item>60</item>
     </string-array>
+    <string-array name="vr_hdr_highlights_names">
+        <item>@string/vr_hdr_highlights_full</item>
+        <item>@string/vr_hdr_highlights_400</item>
+        <item>@string/vr_hdr_highlights_250</item>
+        <item>@string/vr_hdr_highlights_150</item>
+    </string-array>
+    <string-array name="vr_hdr_highlights_values" translatable="false">
+        <item>0</item>
+        <item>400</item>
+        <item>250</item>
+        <item>150</item>
+    </string-array>
     <string-array name="vr_brightness_names">
         <item>@string/vr_brightness_system</item>
         <item>50%</item>

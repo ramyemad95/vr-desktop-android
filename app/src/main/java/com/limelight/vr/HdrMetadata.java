@@ -61,6 +61,22 @@ public final class HdrMetadata {
      * so the display keeps its own assumption for them.
      */
     public int[][] eglAttributes() {
+        return eglAttributes(0);
+    }
+
+    /**
+     * As {@link #eglAttributes()}; with {@code peakLimitNits} above 0 the view limits its highlights to that
+     * brightness itself, so that is what the display is told the picture goes up to.
+     */
+    public int[][] eglAttributes(int peakLimitNits) {
+        int maxDisplay = maxDisplayNits;
+        int maxContent = maxContentNits;
+        int maxAverage = maxFrameAverageNits;
+        if (peakLimitNits > 0) {
+            maxDisplay = peakLimitNits;
+            maxContent = peakLimitNits;
+            maxAverage = maxAverage == 0 ? 0 : Math.min(maxAverage, peakLimitNits);
+        }
         int[] names = {
                 EGL_SMPTE2086_DISPLAY_PRIMARY_RX_EXT, EGL_SMPTE2086_DISPLAY_PRIMARY_RY_EXT,
                 EGL_SMPTE2086_DISPLAY_PRIMARY_GX_EXT, EGL_SMPTE2086_DISPLAY_PRIMARY_GY_EXT,
@@ -78,16 +94,16 @@ public final class HdrMetadata {
                 out.add(new int[] {names[i], chromaticity[i]});
             }
         }
-        if (maxDisplayNits != 0) {
-            out.add(new int[] {EGL_SMPTE2086_MAX_LUMINANCE_EXT, maxDisplayNits * EGL_METADATA_SCALING});
-            // 0.0001 nits * 50000 = 5 per unit
-            out.add(new int[] {EGL_SMPTE2086_MIN_LUMINANCE_EXT, minDisplayTenThousandthNits * 5});
+        if (maxDisplay != 0) {
+            out.add(new int[] {EGL_SMPTE2086_MAX_LUMINANCE_EXT, maxDisplay * EGL_METADATA_SCALING});
+            // The value is in 0.0001 nits
+            out.add(new int[] {EGL_SMPTE2086_MIN_LUMINANCE_EXT, minDisplayTenThousandthNits * (EGL_METADATA_SCALING / 10000)});
         }
-        if (maxContentNits != 0) {
-            out.add(new int[] {EGL_CTA861_3_MAX_CONTENT_LIGHT_LEVEL_EXT, maxContentNits * EGL_METADATA_SCALING});
+        if (maxContent != 0) {
+            out.add(new int[] {EGL_CTA861_3_MAX_CONTENT_LIGHT_LEVEL_EXT, maxContent * EGL_METADATA_SCALING});
         }
-        if (maxFrameAverageNits != 0) {
-            out.add(new int[] {EGL_CTA861_3_MAX_FRAME_AVERAGE_LEVEL_EXT, maxFrameAverageNits * EGL_METADATA_SCALING});
+        if (maxAverage != 0) {
+            out.add(new int[] {EGL_CTA861_3_MAX_FRAME_AVERAGE_LEVEL_EXT, maxAverage * EGL_METADATA_SCALING});
         }
         return out.toArray(new int[0][]);
     }

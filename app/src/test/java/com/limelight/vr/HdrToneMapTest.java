@@ -32,7 +32,7 @@ public class HdrToneMapTest {
     public void midtonesPassThroughUnchanged() {
         // 50 nits is a quarter of SDR white, below the knee: only the BT.2020 to BT.709 matrix (rows sum to 1 for
         // gray) and gamma apply.
-        float expected = (float) Math.pow(50 / HdrToneMap.SDR_WHITE_NITS, 1 / 2.2);
+        float expected = (float) Math.pow(50 / PictureSettings.STANDARD_WHITE_NITS, 1 / PictureSettings.PHONE_GAMMA);
         float[] out = gray(50f);
         for (float c : out) {
             assertEquals(expected, c, 2e-3f);
@@ -41,7 +41,7 @@ public class HdrToneMapTest {
 
     @Test
     public void highlightsRollOffBelowFullWhiteAndStayInOrder() {
-        float white = gray(HdrToneMap.SDR_WHITE_NITS)[0];
+        float white = gray(PictureSettings.STANDARD_WHITE_NITS)[0];
         float bright = gray(1000f)[0];
         float peak = gray(10000f)[0];
         assertTrue("SDR white " + white, white > 0.9f && white < 1f);
@@ -52,7 +52,7 @@ public class HdrToneMapTest {
 
     @Test
     public void rollOffIsContinuousAndFlattens() {
-        float k = HdrToneMap.KNEE;
+        float k = PictureSettings.STANDARD_KNEE;
         assertEquals(k, HdrToneMap.rollOff(k), 1e-6f);
         assertEquals(k + 1e-3f, HdrToneMap.rollOff(k + 1e-3f), 1e-5f); // slope 1 at the knee
         assertTrue(HdrToneMap.rollOff(100f) <= 1f);
@@ -111,8 +111,8 @@ public class HdrToneMapTest {
     public void shaderFunctionUsesTheSameConstants() {
         String glsl = HdrToneMap.shaderFunction(true);
         assertTrue(glsl.contains("vec3 hdrToSdr(vec3 pq)"));
-        assertTrue(glsl.contains(String.valueOf(HdrToneMap.KNEE)));
-        assertTrue(glsl.contains(String.valueOf(10000f / HdrToneMap.SDR_WHITE_NITS)));
+        assertTrue(glsl.contains(String.valueOf(PictureSettings.STANDARD_KNEE)));
+        assertTrue(glsl.contains(String.valueOf(10000f / PictureSettings.STANDARD_WHITE_NITS)));
         // No exponent notation, which GLSL ES 1.0 float literals would still accept but is easy to get wrong
         assertTrue(!glsl.matches("(?s).*\\d[eE]-?\\d.*"));
     }

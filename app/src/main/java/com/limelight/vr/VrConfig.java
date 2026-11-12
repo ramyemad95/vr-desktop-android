@@ -23,17 +23,18 @@ public final class VrConfig {
     public final StereoMode stereoMode;
     /** Four samples per pixel and built-in sharpening when the picture is scaled to the screen; see {@link VrShaders}. */
     public final boolean hqScaling;
+    /**
+     * Picture softness, 0 (as sharp as the scaling goes) to 1: how coarse a version of the frame each screen pixel
+     * reads; see {@link VrShaders#lodBias}.
+     */
+    public final float softness;
+    /** Whether a stream much larger than an eye's screen is halved on the way in; see {@link #frameTargetSize}. */
+    public final boolean halveLargeFrames;
 
     public VrConfig(ViewerProfile viewer, float screenWidthDegrees, int videoWidth, int videoHeight, float metersPerPixel,
                     float sharpness, boolean recenterVertically, boolean nativeColors, PictureSettings picture,
-                    boolean antiScreenDoor, StereoMode stereoMode) {
-        this(viewer, screenWidthDegrees, videoWidth, videoHeight, metersPerPixel, sharpness, recenterVertically,
-                nativeColors, picture, antiScreenDoor, stereoMode, false);
-    }
-
-    public VrConfig(ViewerProfile viewer, float screenWidthDegrees, int videoWidth, int videoHeight, float metersPerPixel,
-                    float sharpness, boolean recenterVertically, boolean nativeColors, PictureSettings picture,
-                    boolean antiScreenDoor, StereoMode stereoMode, boolean hqScaling) {
+                    boolean antiScreenDoor, StereoMode stereoMode, boolean hqScaling, float softness,
+                    boolean halveLargeFrames) {
         this.viewer = viewer;
         this.screenWidthDegrees = screenWidthDegrees;
         this.videoWidth = videoWidth;
@@ -46,6 +47,40 @@ public final class VrConfig {
         this.antiScreenDoor = antiScreenDoor;
         this.stereoMode = stereoMode != null ? stereoMode : StereoMode.OFF;
         this.hqScaling = hqScaling;
+        this.softness = Float.isNaN(softness) ? 0f : Math.max(0f, Math.min(1f, softness));
+        this.halveLargeFrames = halveLargeFrames;
+    }
+
+    /** How many frame pixels per eye pixel the frame texture keeps at least, so halving it loses nothing visible. */
+    static final float FRAME_PIXELS_PER_EYE_PIXEL = 1.2f;
+
+    /**
+     * The size of the texture the stream's frames are prefiltered into when {@link #halveLargeFrames} is set. A
+     * stream much larger than an eye's part of the phone's screen is halved once on the way in: a 3840x2160 stream
+     * on a 1544-pixel-wide eye becomes 1920x1080, which is still more than the virtual screen can show (docs/
+     * VR-RENDERER.md has the numbers), and tone mapping, the mip chain and the eye pass's reads then work on a
+     * quarter of the pixels. One bilinear sample
+     * at the middle of each 2x2 block averages it exactly. In a 3D mode each eye gets half the frame, so the frame
+     * keeps its size.
+     *
+     * @param eyeWidthPixels the width of one eye's half of the phone's screen
+     * @return {width, height}
+     */
+    public static int[] frameTargetSize(int videoWidth, int videoHeight, int eyeWidthPixels, boolean stereo) {
+        int w = videoWidth, h = videoHeight;
+        if (!stereo && eyeWidthPixels > 0) {
+            // One halving only: a single bilinear sample can't average more than 2x2
+            if (w % 2 == 0 && h % 2 == 0 && w / 2 >= FRAME_PIXELS_PER_EYE_PIXEL * eyeWidthPixels) {
+                w /= 2;
+                h /= 2;
+            }
+        }
+        return new int[] {w, h};
+    }
+
+    /** The "Picture softness" setting, in percent, as 0 to 1. */
+    public static float softnessFromPercent(int percent) {
+        return Math.max(0, Math.min(100, percent)) / 100f;
     }
 
     /** The "Sharpness" setting, in percent, as an unsharp-mask strength. */

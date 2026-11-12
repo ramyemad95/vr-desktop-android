@@ -46,3 +46,4 @@ app/.externalNativeBuild/
 *.aab
 captures/
 .externalNativeBuild/
+/frame-logs/

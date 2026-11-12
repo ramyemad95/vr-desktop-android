@@ -81,6 +81,64 @@ public class HdrScreenMathTest {
         assertEquals(203f, HdrToneMap.pqToNits(HdrToneMap.sdrToPq(1f, 1f, 1f, 203f, true)[0]), 0.5f);
     }
 
+    private static float nits(float pq) {
+        return HdrToneMap.pqToNits(pq);
+    }
+
+    @Test
+    public void highlightLimitBringsWhitesDownAndLiftsMidtones() {
+        PictureSettings softer = new PictureSettings(203f, 0.75f, 1f, 2.2f, 250f);
+        assertEquals(1.4f, softer.hdrGain(), 1e-3f);
+        assertEquals(1f, PictureSettings.STANDARD.hdrGain(), 0f);
+        // A 700-nit white comes down to under the limit; an 80-nit mid-tone gets brighter
+        float white = HdrToneMap.nitsToPq(700f);
+        float[] w = HdrToneMap.hdrForPq(white, white, white, false, softer);
+        assertTrue("white " + nits(w[0]), nits(w[0]) <= 250f && nits(w[0]) > 200f);
+        float mid = HdrToneMap.nitsToPq(80f);
+        float[] m = HdrToneMap.hdrForPq(mid, mid, mid, false, softer);
+        assertEquals(112f, nits(m[0]), 1.5f);
+        // Brighter in still means brighter out, and nothing passes the limit
+        float last = 0f;
+        for (float n = 1f; n <= 10000f; n *= 1.5f) {
+            float v = HdrToneMap.nitsToPq(n);
+            float out = nits(HdrToneMap.hdrForPq(v, v, v, false, softer)[0]);
+            assertTrue(out >= last - 0.01f);
+            assertTrue(out <= 250.5f);
+            last = out;
+        }
+        // A saturated highlight keeps its channel order (its hue) when it is rolled off
+        float[] c = HdrToneMap.hdrForPq(HdrToneMap.nitsToPq(900f), HdrToneMap.nitsToPq(300f), HdrToneMap.nitsToPq(60f), false, softer);
+        assertTrue(c[0] > c[1] && c[1] > c[2]);
+    }
+
+    @Test
+    public void contrastDeepensDarksAndLiftsBrightsAroundThePivot() {
+        PictureSettings tv = new PictureSettings(203f, 0.75f, 1f, 2.4f);
+        float dark = HdrToneMap.nitsToPq(5f), pivot = HdrToneMap.nitsToPq(HdrToneMap.HDR_CONTRAST_PIVOT_NITS),
+                bright = HdrToneMap.nitsToPq(200f);
+        assertTrue(nits(HdrToneMap.hdrForPq(dark, dark, dark, false, tv)[0]) < 5f);
+        assertEquals(HdrToneMap.HDR_CONTRAST_PIVOT_NITS, nits(HdrToneMap.hdrForPq(pivot, pivot, pivot, false, tv)[0]), 0.3f);
+        assertTrue(nits(HdrToneMap.hdrForPq(bright, bright, bright, false, tv)[0]) > 200f);
+        // Black stays black
+        assertEquals(0f, HdrToneMap.hdrForPq(0f, 0f, 0f, false, tv)[0], 1e-6f);
+    }
+
+    @Test
+    public void metadataReportsTheHighlightLimit() {
+        java.nio.ByteBuffer b = java.nio.ByteBuffer.allocate(26).order(java.nio.ByteOrder.LITTLE_ENDIAN);
+        for (int v : new int[] {35400, 14600, 8500, 39850, 6550, 2300, 15635, 16450, 700, 0, 0, 0, 0}) {
+            b.putShort((short) v);
+        }
+        HdrMetadata m = HdrMetadata.parse(b.array());
+        int[][] full = m.eglAttributes(0);
+        int[][] limited = m.eglAttributes(250);
+        assertEquals(700 * 50000, full[8][1]);
+        assertEquals(250 * 50000, limited[8][1]);
+        // The content's brightest pixel is now known too: the limit
+        assertEquals(HdrMetadata.EGL_CTA861_3_MAX_CONTENT_LIGHT_LEVEL_EXT, limited[limited.length - 1][0]);
+        assertEquals(250 * 50000, limited[limited.length - 1][1]);
+    }
+
     @Test
     public void shaderFunctionsArePlainGlsl() {
         String neutral = HdrToneMap.pqShaderFunctions(PictureSettings.STANDARD);
@@ -92,6 +150,9 @@ public class HdrScreenMathTest {
         String vivid = HdrToneMap.pqShaderFunctions(PictureSettings.STANDARD, true);
         assertTrue(vivid.contains(String.valueOf(HdrToneMap.BT2020_NATIVE_STRETCH[0])));
         assertTrue(vivid.contains(String.valueOf(HdrToneMap.DISPLAY_P3_TO_BT2020[0])));
-        assertFalse((neutral + strong + vivid).matches("(?s).*\\d[eE]-?\\d.*"));
+        String limited = HdrToneMap.pqShaderFunctions(new PictureSettings(203f, 0.75f, 1.2f, 2.4f, 250f), true);
+        assertTrue(limited.contains("lin *= 1.400000;"));
+        assertTrue(limited.contains("0.012500")); // half of 250 nits, relative to 10000
+        assertFalse((neutral + strong + vivid + limited).matches("(?s).*\\d[eE]-?\\d.*"));
     }
 }

@@ -11,8 +11,9 @@ import java.net.Socket;
 import java.nio.charset.StandardCharsets;
 
 /**
- * Talks to the VR Desktop Host app's display-mode endpoint (docs/PROTOCOL.md, v1) over a plain socket: one short
- * request at stream start, and a long-poll thread during the stream that reports every change.
+ * Talks to the VR Desktop Host app (docs/PROTOCOL.md) over a plain socket. The display mode (v1): one short request
+ * at stream start, and a long-poll thread during the stream that reports every change. Any other endpoint (the v2
+ * stats): {@link #get}.
  */
 public final class PcModeClient {
     public interface Listener {
@@ -22,8 +23,10 @@ public final class PcModeClient {
 
     /** Responses are tiny; anything bigger isn't this endpoint. */
     private static final int MAX_RESPONSE_BYTES = 16 * 1024;
+    /** Longer than the 25 s after which the host answers a long poll with the unchanged mode. */
     private static final int LONG_POLL_READ_TIMEOUT_MS = 30_000;
-    private static final int RETRY_DELAY_MS = 5_000;
+    /** How long to wait before asking a host app that didn't answer again. */
+    static final int RETRY_DELAY_MS = 5_000;
 
     private final String host;
     private volatile boolean stopped;
@@ -102,34 +105,96 @@ public final class PcModeClient {
         }
     }
 
-    private PcDisplayMode request(long afterSeq, int connectTimeoutMs, int readTimeoutMs) throws IOException {
+    /** An HTTP response from the host app: its status code and body. */
+    public static final class Response {
+        public final int status;
+        public final String body;
+
+        Response(int status, String body) {
+            this.status = status;
+            this.body = body;
+        }
+
+        /** Splits a whole HTTP/1.1 response as read from the socket; null if it isn't one. */
+        static Response parse(String raw) {
+            if (raw == null || !raw.startsWith("HTTP/1.")) {
+                return null;
+            }
+            int lineEnd = raw.indexOf("\r\n");
+            String[] parts = (lineEnd >= 0 ? raw.substring(0, lineEnd) : raw).split(" ");
+            if (parts.length < 2) {
+                return null;
+            }
+            int status;
+            try {
+                status = Integer.parseInt(parts[1]);
+            } catch (NumberFormatException e) {
+                return null;
+            }
+            int bodyStart = raw.indexOf("\r\n\r\n");
+            return new Response(status, bodyStart >= 0 ? raw.substring(bodyStart + 4) : "");
+        }
+    }
+
+    /**
+     * {@code GET path} on the host app's port ({@link PcDisplayMode#PORT}), once, for other endpoints than the
+     * display mode (the v2 stats). Blocks for at most about {@code connectTimeoutMs + readTimeoutMs}.
+     *
+     * @throws IOException if the host app isn't reachable or doesn't answer HTTP
+     */
+    public static Response get(String host, String path, int connectTimeoutMs, int readTimeoutMs) throws IOException {
+        return exchange(null, host, path, connectTimeoutMs, readTimeoutMs);
+    }
+
+    /**
+     * One request and its response. With an {@code owner}, the socket is the one its {@link #stop()} closes.
+     *
+     * @throws IOException if the host app isn't reachable or doesn't answer HTTP
+     */
+    private static Response exchange(PcModeClient owner, String host, String path, int connectTimeoutMs,
+                                     int readTimeoutMs) throws IOException {
         String bare = host.startsWith("[") && host.endsWith("]") ? host.substring(1, host.length() - 1) : host;
         try (Socket socket = new Socket()) {
-            activeSocket = socket;
-            if (stopped) {
-                throw new IOException("stopped");
+            if (owner != null) {
+                owner.activeSocket = socket;
+                if (owner.stopped) {
+                    throw new IOException("stopped");
+                }
             }
             socket.connect(new InetSocketAddress(bare, PcDisplayMode.PORT), connectTimeoutMs);
             socket.setSoTimeout(readTimeoutMs);
             String hostHeader = bare.contains(":") ? "[" + bare + "]" : bare;
             OutputStream out = socket.getOutputStream();
-            out.write(PcDisplayMode.httpRequest(hostHeader, afterSeq).getBytes(StandardCharsets.US_ASCII));
+            out.write(PcDisplayMode.httpGet(hostHeader, path).getBytes(StandardCharsets.US_ASCII));
             out.flush();
-
-            InputStream in = socket.getInputStream();
-            ByteArrayOutputStream response = new ByteArrayOutputStream();
-            byte[] buf = new byte[2048];
-            int n;
-            while ((n = in.read(buf)) > 0) {
-                response.write(buf, 0, n);
-                if (response.size() > MAX_RESPONSE_BYTES) {
-                    throw new IOException("response too large");
-                }
+            Response response = Response.parse(readAll(socket.getInputStream()));
+            if (response == null) {
+                throw new IOException("not an HTTP response");
             }
-            return PcDisplayMode.parseHttpResponse(response.toString("UTF-8"));
+            return response;
         } finally {
-            activeSocket = null;
+            if (owner != null) {
+                owner.activeSocket = null;
+            }
         }
+    }
+
+    private static String readAll(InputStream in) throws IOException {
+        ByteArrayOutputStream response = new ByteArrayOutputStream();
+        byte[] buf = new byte[2048];
+        int n;
+        while ((n = in.read(buf)) > 0) {
+            response.write(buf, 0, n);
+            if (response.size() > MAX_RESPONSE_BYTES) {
+                throw new IOException("response too large");
+            }
+        }
+        return response.toString("UTF-8");
+    }
+
+    private PcDisplayMode request(long afterSeq, int connectTimeoutMs, int readTimeoutMs) throws IOException {
+        Response response = exchange(this, host, PcDisplayMode.modePath(afterSeq), connectTimeoutMs, readTimeoutMs);
+        return response.status == 200 ? PcDisplayMode.parseJson(response.body) : null;
     }
 
     private void sleepQuietly(int millis) {

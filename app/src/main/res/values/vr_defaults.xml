@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    The defaults of the VR settings: the one place they are written. The settings screen (res/xml/preferences.xml)
+    and PreferenceConfiguration.readPreferences() both read them from here. They are the settings tuned on a
+    Galaxy S22 Ultra in a Cardboard v2-type viewer.
+-->
+<resources>
+    <bool name="default_checkbox_vr_mode">true</bool>
+    <string name="default_list_vr_viewer" translatable="false">cardboard_v2</string>
+    <!-- Degrees of horizontal view -->
+    <integer name="default_seekbar_vr_screen_size">60</integer>
+    <bool name="default_checkbox_vr_head_tracking">true</bool>
+    <!-- Hz; "0" is the highest the display offers -->
+    <string name="default_list_vr_refresh_rate" translatable="false">60</string>
+    <bool name="default_checkbox_vr_stats_panel">false</bool>
+    <bool name="default_checkbox_frame_log">true</bool>
+    <!-- Percent; 0 is off -->
+    <integer name="default_seekbar_vr_sharpness">30</integer>
+    <bool name="default_checkbox_vr_recenter_vertical">true</bool>
+    <!-- mm; "0" is the viewer's own -->
+    <string name="default_list_vr_lens_distance" translatable="false">50</string>
+    <!-- mm; "0" is the viewer's own -->
+    <string name="default_list_vr_screen_distance" translatable="false">60</string>
+    <bool name="default_checkbox_vr_match_pc_resolution">true</bool>
+    <bool name="default_checkbox_vr_fc27_mode">true</bool>
+    <!-- sRGB, or "native" (Display P3) -->
+    <string name="default_list_vr_color_space" translatable="false">auto</string>
+    <!-- Frames of buffer; 0 is off -->
+    <string name="default_list_vr_smooth_video" translatable="false">1</string>
+    <!-- Percent; 0 leaves it to the system -->
+    <string name="default_list_vr_brightness" translatable="false">0</string>
+    <bool name="default_checkbox_vr_hdr_screen">false</bool>
+    <!-- Nits whites are limited to; 0 is as sent -->
+    <string name="default_list_vr_hdr_highlights" translatable="false">0</string>
+    <bool name="default_checkbox_vr_anti_screen_door">false</bool>
+    <bool name="default_checkbox_vr_hq_scaling">false</bool>
+    <!-- Percent; picked side by side in the headset, 12 Nov 2026 -->
+    <integer name="default_seekbar_vr_softness">80</integer>
+    <bool name="default_checkbox_vr_halve_frame">false</bool>
+    <bool name="default_checkbox_vr_ultimate_quality">false</bool>
+    <!-- Or "sbs", "sbs_rl", "tb"; see StereoMode -->
+    <string name="default_list_vr_3d_mode" translatable="false">off</string>
+    <!-- Nits, ITU-R BT.2408 -->
+    <string name="default_list_vr_hdr_white" translatable="false">203</string>
+    <!-- Knee, relative to white -->
+    <string name="default_list_vr_hdr_compression" translatable="false">0.75</string>
+    <!-- Percent saturation -->
+    <integer name="default_seekbar_vr_color">100</integer>
+    <!-- Gamma to imitate; the phone's own is 2.2 -->
+    <string name="default_list_vr_contrast" translatable="false">2.2</string>
+</resources>

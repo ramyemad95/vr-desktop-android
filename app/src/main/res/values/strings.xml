@@ -309,7 +309,13 @@
     <string name="title_checkbox_vr_mode">VR mode</string>
     <string name="summary_checkbox_vr_mode">Show the PC screen as a virtual screen for a phone VR viewer (Cardboard). Tap the screen, or press the viewer\'s button, to bring the screen back in front of you.</string>
     <string name="title_checkbox_vr_hdr_screen">HDR on the phone\'s screen</string>
-    <string name="summary_checkbox_vr_hdr_screen">Shows HDR games as real HDR on the phone\'s screen, like your TV, instead of converting them to a normal picture: brighter highlights and the game\'s full colors. The screen stays in HDR mode for the whole stream (brighter, more heat). Color and Color space still apply (Native stretches the colors to the screen\'s full range, like a TV\'s Native mode); Highlight compression and Contrast don\'t, and HDR white level sets how bright the desktop and other normal pictures are.</string>
+    <string name="summary_checkbox_vr_hdr_screen">Shows HDR games as real HDR on the phone\'s screen, like your TV, instead of converting them to a normal picture: brighter highlights and the game\'s full colors. The screen stays in HDR mode for the whole stream (brighter, more heat). Color, Contrast and Color space still apply (Native stretches the colors to the screen\'s full range, like a TV\'s Native mode), and HDR highlights limits how bright whites get. Highlight compression doesn\'t apply, and HDR white level sets how bright the desktop and other normal pictures are.</string>
+    <string name="title_list_vr_hdr_highlights">HDR highlights</string>
+    <string name="summary_list_vr_hdr_highlights">For HDR on the phone\'s screen. In a headset, very bright whites glare through the lenses and make the rest of the picture look pale. This limits how bright whites get and brightens the mid-tones a little, so grass, kits and the crowd look richer. Softer steps are easier on the eyes and run cooler.</string>
+    <string name="vr_hdr_highlights_full">Full: as the game sends them</string>
+    <string name="vr_hdr_highlights_400">Soft: whites up to 400 nits</string>
+    <string name="vr_hdr_highlights_250">Softer: whites up to 250 nits</string>
+    <string name="vr_hdr_highlights_150">Softest: whites up to 150 nits</string>
     <string name="title_list_vr_brightness">Screen brightness in VR</string>
     <string name="summary_list_vr_brightness">Inside a headset the phone\'s light sensor is covered, so automatic brightness dims the screen and colors look dull. This holds the brightness while streaming. Brighter means more heat.</string>
     <string name="vr_brightness_system">Automatic (the phone\'s setting)</string>
@@ -366,13 +372,20 @@
     <string name="vr_3d_mode_sbs_rl">Side by side (right eye first)</string>
     <string name="vr_3d_mode_tb">Top and bottom</string>
     <string name="vr_no_head_tracking">This phone has no rotation sensor, so the virtual screen can\'t stay in place when you move your head.</string>
+    <string name="title_checkbox_vr_ultimate_quality">Ultimate High Quality</string>
+    <string name="summary_checkbox_vr_ultimate_quality">Puts picture quality ahead of speed and battery. Turns on High-quality scaling and Anti screen-door and keeps 4K frames at full size, whatever those switches say. Picture softness and Sharpness stay as you set them.</string>
     <string name="title_checkbox_vr_hq_scaling">High-quality scaling</string>
-    <string name="summary_checkbox_vr_hq_scaling">The stream has more pixels than the phone can show on the virtual screen, so it\'s shrunk to fit. This reads the picture four times per screen pixel instead of once and adds its own mild sharpening: less shimmer and false detail on grass, nets, the crowd and text, and a truer picture. It includes some sharpening, so Sharpness can go lower. Costs more graphics work.</string>
+    <string name="summary_checkbox_vr_hq_scaling">The stream has more pixels than the phone can show on the virtual screen, so it\'s shrunk to fit. This reads the picture four times per screen pixel instead of once: less shimmer and false detail on grass, nets, the crowd and text, and a truer picture. Costs more graphics work.</string>
     <string name="title_checkbox_vr_anti_screen_door">Anti screen-door</string>
     <string name="summary_checkbox_vr_anti_screen_door">Makes the pixel grid stand out less. The phone\'s screen has half as many red and blue subpixels as green ones, so sharp color detail sparkles and shows a colored mesh through the lenses. This softens only the color of fine detail and keeps brightness, and so text, sharp; Sharpness then sharpens brightness only. The black gaps between pixels are physical: a matte screen protector hides them best, with Sharpness to win back detail.</string>
     <string name="title_seekbar_vr_sharpness">Sharpness</string>
     <string name="summary_seekbar_vr_sharpness">Sharpens the PC screen to make up for the softening of the lenses and the downscale. Try 30–50%; too much adds halos around text.</string>
     <string name="suffix_seekbar_vr_sharpness" formatted="false">%</string>
+    <string name="title_seekbar_vr_softness">Picture softness</string>
+    <string name="summary_seekbar_vr_softness">How smoothly the stream is shrunk onto the virtual screen. Higher is smoother, with a less visible pixel grid and less sparkle on fine detail; lower is crisper for small text. 0% is the sharpest. Try 70–90% for games.</string>
+    <string name="suffix_seekbar_vr_softness" formatted="false">%</string>
+    <string name="title_checkbox_vr_halve_frame">Halve 4K frames</string>
+    <string name="summary_checkbox_vr_halve_frame">Shrinks a stream much larger than one eye\'s part of the screen (4K) to half its size before drawing it. A quarter of the graphics work per video frame; measured the same picture at higher Picture softness, slightly softer at low softness.</string>
     <string name="title_checkbox_vr_head_tracking">Head tracking</string>
     <string name="summary_checkbox_vr_head_tracking">Keep the virtual screen in place when you turn your head. Turn off to keep the screen fixed in front of your eyes.</string>
     <string name="title_checkbox_vr_recenter_vertical">Re-center up and down too</string>
@@ -384,6 +397,8 @@
     <string name="vr_refresh_rate_96">96 Hz</string>
     <string name="vr_refresh_rate_60">60 Hz</string>
     <string name="title_checkbox_vr_stats_panel">Stats panel</string>
+    <string name="title_checkbox_frame_log">Frame timing log</string>
+    <string name="summary_checkbox_frame_log">Records how each frame gets from the PC to the screen, and why any stutters, to a file on the phone (about 5–10 MB an hour; the last 15 streams are kept). For finding stutter; see docs/FRAME-LOG.md.</string>
     <string name="summary_checkbox_vr_stats_panel">Show a panel below the virtual screen with the network status (green OK, yellow unstable, red poor), the PC\'s encode time and the phone\'s decode time. Look down to read it.</string>
     <string name="vr_refresh_rate_capped">%1$d Hz isn\'t available, so the view runs at %2$d Hz. On Samsung phones, set Settings → Display → Motion smoothness to Adaptive.</string>
 </resources>

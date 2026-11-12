@@ -19,6 +19,7 @@ import com.limelight.R;
 import com.limelight.nvstream.av.video.VideoDecoderRenderer;
 import com.limelight.nvstream.jni.MoonBridge;
 import com.limelight.preferences.PreferenceConfiguration;
+import com.limelight.vr.FrameLog;
 import com.limelight.vr.FramePacer;
 import com.limelight.vr.VrStats;
 
@@ -122,6 +123,12 @@ public class MediaCodecDecoderRenderer extends VideoDecoderRenderer implements C
     // time on the PC by its codec timestamp
     private volatile FramePacer framePacer;
     private final java.util.concurrent.ConcurrentHashMap<Long, Long> pcTimeByPts = new java.util.concurrent.ConcurrentHashMap<>();
+
+    // Frame timing log, or null: each frame's record from submit to display, by its codec timestamp while it's in
+    // the decoder and by its output buffer index while the pacer or the Choreographer holds it
+    private volatile FrameLog frameLog;
+    private final java.util.concurrent.ConcurrentHashMap<Long, FrameLog.Frame> logFramesByPts = new java.util.concurrent.ConcurrentHashMap<>();
+    private final java.util.concurrent.ConcurrentHashMap<Integer, FrameLog.Frame> logFramesByIndex = new java.util.concurrent.ConcurrentHashMap<>();
 
     private static final int OUTPUT_BUFFER_QUEUE_LIMIT = 2;
     private long lastRenderedFrameTimeNanos;
@@ -547,6 +554,16 @@ public class MediaCodecDecoderRenderer extends VideoDecoderRenderer implements C
         // Start the decoder
         videoDecoder.start();
 
+        FrameLog log = frameLog;
+        if (log != null) {
+            String name;
+            try {
+                name = videoDecoder.getName();
+            } catch (IllegalStateException e) {
+                name = "?";
+            }
+            log.event(System.nanoTime(), "decoder " + name + " started: " + format.toString().replace(',', ';'));
+        }
     }
 
     private boolean tryConfigureDecoder(MediaCodecInfo selectedDecoderInfo, MediaFormat format, boolean throwOnCodecError) {
@@ -724,6 +741,7 @@ public class MediaCodecDecoderRenderer extends VideoDecoderRenderer implements C
                     // The pacer's held frames are output buffers too
                     framePacer.clear();
                 }
+                logDecoderReset(codecRecoveryType.get() == CR_RECOVERY_TYPE_FLUSH ? "decoder flush" : "decoder restart");
 
                 // If we just need a flush, do so now with all threads quiesced.
                 if (codecRecoveryType.get() == CR_RECOVERY_TYPE_FLUSH) {
@@ -983,6 +1001,7 @@ public class MediaCodecDecoderRenderer extends VideoDecoderRenderer implements C
             if (nextOutputBuffer != null) {
                 try {
                     videoDecoder.releaseOutputBuffer(nextOutputBuffer, frameTimeNanos);
+                    logReleased(nextOutputBuffer, frameTimeNanos);
 
                     lastRenderedFrameTimeNanos = frameTimeNanos;
                     activeWindowVideoStats.totalFramesRendered++;
@@ -1038,11 +1057,67 @@ public class MediaCodecDecoderRenderer extends VideoDecoderRenderer implements C
                 }
 
                 @Override
-                public void drop(int index) {
+                public void drop(int index, boolean overflow) {
                     releasePacedFrame(index, false);
+                    FrameLog log = frameLog;
+                    if (log != null) {
+                        log.dropped(logFramesByIndex.remove(index), overflow);
+                    }
                 }
             });
         }
+    }
+
+    /** Frame timing log: records each frame from submit to display (see FrameLog); set before the stream starts. */
+    public void setFrameLog(FrameLog log) {
+        frameLog = log;
+    }
+
+    /** Frame timing log: the frame with this codec timestamp came out of the decoder as this output buffer. */
+    private void logDecoded(long ptsUs, int index) {
+        FrameLog log = frameLog;
+        if (log == null) {
+            return;
+        }
+        FrameLog.Frame frame = logFramesByPts.remove(ptsUs);
+        if (frame != null) {
+            log.decoded(frame, System.nanoTime());
+            logFramesByIndex.put(index, frame);
+        }
+    }
+
+    /** Frame timing log: this output buffer went to the surface with this render timestamp. */
+    private void logReleased(int index, long renderTimestampNs) {
+        FrameLog log = frameLog;
+        if (log != null) {
+            log.released(logFramesByIndex.remove(index), renderTimestampNs);
+        }
+    }
+
+    /** Frame timing log: this output buffer went back to the decoder without being shown. */
+    private void logDropped(int index, boolean overflow) {
+        FrameLog log = frameLog;
+        if (log != null) {
+            log.dropped(logFramesByIndex.remove(index), overflow);
+        }
+    }
+
+    /** Frame timing log: the decoder was flushed or restarted, and its frames went with it. */
+    private void logDecoderReset(String what) {
+        FrameLog log = frameLog;
+        if (log == null) {
+            return;
+        }
+        log.event(System.nanoTime(), what + " with " + (logFramesByPts.size() + logFramesByIndex.size()) +
+                " frame(s) in it");
+        for (FrameLog.Frame frame : logFramesByPts.values()) {
+            log.flushed(frame);
+        }
+        for (FrameLog.Frame frame : logFramesByIndex.values()) {
+            log.flushed(frame);
+        }
+        logFramesByPts.clear();
+        logFramesByIndex.clear();
     }
 
     /** Smooth video: hands a decoded frame to the pacer, which shows or drops it later (see FramePacer). */
@@ -1050,7 +1125,9 @@ public class MediaCodecDecoderRenderer extends VideoDecoderRenderer implements C
         Long pcTimeUs = pcTimeByPts.remove(ptsUs);
         if (pcTimeUs == null) {
             // A frame the pacer can't time (queued before it was set): show it now
-            videoDecoder.releaseOutputBuffer(index, System.nanoTime());
+            long now = System.nanoTime();
+            videoDecoder.releaseOutputBuffer(index, now);
+            logReleased(index, now);
             activeWindowVideoStats.totalFramesRendered++;
             return;
         }
@@ -1065,7 +1142,9 @@ public class MediaCodecDecoderRenderer extends VideoDecoderRenderer implements C
         }
         try {
             if (render) {
-                codec.releaseOutputBuffer(index, System.nanoTime());
+                long now = System.nanoTime();
+                codec.releaseOutputBuffer(index, now);
+                logReleased(index, now);
                 activeWindowVideoStats.totalFramesRendered++;
             }
             else {
@@ -1091,6 +1170,7 @@ public class MediaCodecDecoderRenderer extends VideoDecoderRenderer implements C
                             int lastIndex = outIndex;
 
                             numFramesOut++;
+                            logDecoded(presentationTimeUs, lastIndex);
 
                             FramePacer pacer = framePacer;
                             if (pacer != null) {
@@ -1100,6 +1180,7 @@ public class MediaCodecDecoderRenderer extends VideoDecoderRenderer implements C
                                 while ((outIndex = videoDecoder.dequeueOutputBuffer(info, 0)) >= 0) {
                                     numFramesOut++;
                                     presentationTimeUs = info.presentationTimeUs;
+                                    logDecoded(presentationTimeUs, outIndex);
                                     holdForPacer(pacer, outIndex, presentationTimeUs);
                                 }
                             }
@@ -1108,11 +1189,13 @@ public class MediaCodecDecoderRenderer extends VideoDecoderRenderer implements C
                                 // Get the last output buffer in the queue
                                 while ((outIndex = videoDecoder.dequeueOutputBuffer(info, 0)) >= 0) {
                                     videoDecoder.releaseOutputBuffer(lastIndex, false);
+                                    logDropped(lastIndex, false);
 
                                     numFramesOut++;
 
                                     lastIndex = outIndex;
                                     presentationTimeUs = info.presentationTimeUs;
+                                    logDecoded(presentationTimeUs, lastIndex);
                                 }
 
                                 if (prefs.framePacing == PreferenceConfiguration.FRAME_PACING_MAX_SMOOTHNESS ||
@@ -1120,11 +1203,14 @@ public class MediaCodecDecoderRenderer extends VideoDecoderRenderer implements C
                                     // In max smoothness or cap FPS mode, we want to never drop frames
                                     // Use a PTS that will cause this frame to never be dropped
                                     videoDecoder.releaseOutputBuffer(lastIndex, 0);
+                                    logReleased(lastIndex, 0);
                                 }
                                 else {
                                     // Use a PTS that will cause this frame to be dropped if another comes in within
                                     // the same V-sync period
-                                    videoDecoder.releaseOutputBuffer(lastIndex, System.nanoTime());
+                                    long now = System.nanoTime();
+                                    videoDecoder.releaseOutputBuffer(lastIndex, now);
+                                    logReleased(lastIndex, now);
                                 }
 
                                 activeWindowVideoStats.totalFramesRendered++;
@@ -1140,7 +1226,9 @@ public class MediaCodecDecoderRenderer extends VideoDecoderRenderer implements C
                                 // refresh rate).
                                 if (outputBufferQueue.size() == OUTPUT_BUFFER_QUEUE_LIMIT) {
                                     try {
-                                        videoDecoder.releaseOutputBuffer(outputBufferQueue.take(), false);
+                                        int oldest = outputBufferQueue.take();
+                                        videoDecoder.releaseOutputBuffer(oldest, false);
+                                        logDropped(oldest, true);
                                     } catch (InterruptedException e) {
                                         // We're shutting down, so we can just drop this buffer on the floor
                                         // and it will be reclaimed when the codec is released.
@@ -1421,11 +1509,24 @@ public class MediaCodecDecoderRenderer extends VideoDecoderRenderer implements C
         }
     }
 
-    @SuppressWarnings("deprecation")
     @Override
     public int submitDecodeUnit(byte[] decodeUnitData, int decodeUnitLength, int decodeUnitType,
                                 int frameNumber, int frameType, char frameHostProcessingLatency,
                                 long receiveTimeUs, long enqueueTimeUs, long presentationTimeUs) {
+        long submitNs = System.nanoTime();
+        int ret = submitDecodeUnit(decodeUnitData, decodeUnitLength, decodeUnitType, frameNumber, frameType,
+                frameHostProcessingLatency, receiveTimeUs, enqueueTimeUs, presentationTimeUs, submitNs);
+        FrameLog log = frameLog;
+        if (ret == MoonBridge.DR_NEED_IDR && log != null) {
+            log.event(System.nanoTime(), "the decoder asked the PC for an IDR frame at frame " + frameNumber);
+        }
+        return ret;
+    }
+
+    @SuppressWarnings("deprecation")
+    private int submitDecodeUnit(byte[] decodeUnitData, int decodeUnitLength, int decodeUnitType,
+                                 int frameNumber, int frameType, char frameHostProcessingLatency,
+                                 long receiveTimeUs, long enqueueTimeUs, long presentationTimeUs, long submitNs) {
         if (stopping) {
             // Don't bother if we're stopping
             return MoonBridge.DR_OK;
@@ -1782,6 +1883,20 @@ public class MediaCodecDecoderRenderer extends VideoDecoderRenderer implements C
             pcTimeByPts.put(timestampUs, presentationTimeUs);
         }
 
+        FrameLog log = frameLog;
+        FrameLog.Frame logFrame = null;
+        if (log != null && decodeUnitType == MoonBridge.BUFFER_TYPE_PICDATA) {
+            if (logFramesByPts.size() > 256) {
+                // Frames that never came out of the decoder
+                logFramesByPts.clear();
+            }
+            logFrame = log.submitted(frameNumber, frameType == MoonBridge.FRAME_TYPE_IDR, decodeUnitLength,
+                    frameHostProcessingLatency, receiveTimeUs, enqueueTimeUs, presentationTimeUs, submitNs);
+            if (logFrame != null) {
+                logFramesByPts.put(timestampUs, logFrame);
+            }
+        }
+
         numFramesIn++;
 
         if (decodeUnitLength > nextInputBuffer.limit() - nextInputBuffer.position()) {
@@ -1799,6 +1914,9 @@ public class MediaCodecDecoderRenderer extends VideoDecoderRenderer implements C
 
         if (!queueNextInputBuffer(timestampUs, codecFlags)) {
             return MoonBridge.DR_NEED_IDR;
+        }
+        if (logFrame != null) {
+            log.queued(logFrame, System.nanoTime());
         }
 
         return MoonBridge.DR_OK;

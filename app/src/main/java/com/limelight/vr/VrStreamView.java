@@ -214,6 +214,11 @@ public class VrStreamView extends GLSurfaceView {
         renderer.setFramePacer(pacer);
     }
 
+    /** Frame timing log: tells it what each refresh shows (see {@link FrameLog}); call after configure(). */
+    public void setFrameLog(FrameLog log) {
+        renderer.setFrameLog(log);
+    }
+
     /**
      * Any thread. Whether the PC is sending HDR10; the renderer tone-maps it to SDR, or passes it to the HDR screen
      * along with the stream's HDR metadata ({@code hdrMetadata}, Sunshine's SS_HDR_METADATA bytes, or null).
@@ -267,7 +272,7 @@ public class VrStreamView extends GLSurfaceView {
     }
 
     /**
-     * Asks for the refresh rate from the settings, by default the display's highest at the current resolution
+     * Asks for the refresh rate from the settings: a fixed one, or the display's highest at the current resolution
      * (120 Hz on a Galaxy S22 Ultra). Head motion is redrawn every refresh, so a higher rate means less lag and
      * smearing when turning the head, even though the desktop stream itself stays at its own frame rate; a lower
      * one saves battery and heat.

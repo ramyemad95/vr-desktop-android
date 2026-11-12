@@ -15,6 +15,12 @@ Code: [`app/src/main/java/com/limelight/vr/`](../app/src/main/java/com/limelight
    that texture's mipmaps. Reading the decoder's YUV texture is the costly part of sampling, so this reads each
    video pixel once per video frame, instead of 9–13 times per display pixel per refresh as before (which pushed
    an S22 Ultra in a viewer to thermal throttling at 120 Hz with a 4K stream). A still desktop costs nothing here.
+   With **Halve 4K frames** on (VR Settings, off by default), a stream much larger than an eye's part of the screen
+   is drawn at half size (`VrConfig.frameTargetSize`: a 4K stream on the S22 Ultra's 1544-pixel eyes becomes
+   1920×1080, still more than the virtual screen covers, see "How many phone pixels the screen covers" below; one
+   bilinear sample averages each 2×2 block). Measured at 4K HDR with high-quality scaling, the full-size frame cost
+   about three quarters of the GPU's work: 75% busy at 421 MHz, and 99% with the VR view down to 51 fps once heat
+   capped the GPU at 220 MHz, where a 1080p stream needed 63%. 3D modes keep the full size.
 3. **Draw, per eye (every refresh):** one 40×40 grid mesh per eye covers half the screen. Each vertex holds the view
    angle the eye sees at that point through the lens (the lens correction is built in). For each pixel, the
    fragment shader:
@@ -25,9 +31,10 @@ Code: [`app/src/main/java/com/limelight/vr/`](../app/src/main/java/com/limelight
    That single sample in the final view is still sharper than the usual "render each eye to a buffer, then
    distort the buffer" approach, which resamples twice.
 4. **Anti-aliasing:** the desktop usually has more pixels than the eye can see (a 4K stream on a 90–100° screen is
-   2.1–2.5 desktop pixels per eye pixel). The mipmaps do the downscaling: one trilinear sample with a −0.5 level
-   bias (half a level sharper than the footprint, which keeps text crisp) and anisotropic filtering up to 4× for
-   the stretched footprints toward the lens's edge. Sampling happens for every pixel, in uniform control flow, so
+   2.1–2.5 desktop pixels per eye pixel). The mipmaps do the downscaling: one trilinear sample with a level bias
+   set by Picture softness (`VrShaders.lodBias`: −0.5 at 0%, half a level sharper than the footprint, which keeps
+   text crisp; +1.1 at the default 80%) and anisotropic filtering up to 4× for the stretched footprints toward the
+   lens's edge. Sampling happens for every pixel, in uniform control flow, so
    the hardware's level selection is defined. The screen's edges are anti-aliased too. Without NPOT mipmap
    support (GLES 2 without OES_texture_npot) the frame falls back to bilinear only.
 5. **HDR:** with Moonlight's "Enable HDR" on, the PC sends HDR10 (PQ, BT.2020) whenever its display is in HDR,
@@ -57,6 +64,11 @@ Code: [`app/src/main/java/com/limelight/vr/`](../app/src/main/java/com/limelight
    content's light levels when the host has them) is set on the window surface with
    `EGL_EXT_surface_SMPTE2086_metadata` and `EGL_EXT_surface_CTA861_3_metadata` (`HdrMetadata`), as a video player
    does, so the display fits the picture to its brightness from the real values instead of assuming them.
+   On the HDR screen the picture settings work in linear light (`HdrToneMap.hdrForPq`): Contrast raises each
+   pixel's luminance to `gamma / 2.2` around 18% of the standard white, Color scales saturation around BT.2020
+   luminance, and **HDR highlights** rolls the brightest channel off toward a limit (400, 250 or 150 nits) from
+   half of it, after a gain of up to 1.4 on everything, and reports that limit as the metadata's maximum. Whites at
+   several hundred nits glare through a viewer's lenses and wash out the rest of the picture.
    **Picture settings** (`PictureSettings`): the HDR white level (the nits that become the phone's white, 203 by
    default) and where the roll-off starts (60/75/90% of white) feed the tone mapper; Color (saturation around each
    pixel's luma) and Contrast (an exponent that imitates gamma 2.3 or 2.4 on the phone's 2.2) apply to every
@@ -65,13 +77,16 @@ Code: [`app/src/main/java/com/limelight/vr/`](../app/src/main/java/com/limelight
    automatic brightness dimmed an S22 Ultra to 28%.
    Moonlight restarts the decoder each time the PC switches HDR on or off ("Trying to restart decoder after
    CodecException" in the log); that's expected.
-6. **High-quality scaling** (VR Settings, off by default): the default single sample, half a mip level sharp, keeps
-   detail but aliases (a 1080p stream on a 60° screen is 1.45 stream pixels per screen pixel, where it reads mip
-   level 0 almost directly). With it on, the eye pass takes four samples on a rotated grid inside the pixel's
-   footprint (placed with the coordinate's derivatives), each one mip level finer, and adds 0.25 of sharpening
-   against the next mip level. Against a Lanczos-3 downscale in a CPU simulation, that is 3.3% RMS error instead of
-   6.4% at 1.45× and 5.7% instead of 6.9% at 2.9× (4K), with 92–100% of the reference's detail. The Sharpness
-   setting alone makes the default's error worse (10.4% at 60%), because it sharpens the aliasing too.
+6. **High-quality scaling** (VR Settings, off by default): a single sample keeps detail but aliases when the
+   stream has only a little more than one pixel per screen pixel, where it reads mip level 0 almost directly. With
+   it on, the eye pass takes four samples on a rotated grid inside the pixel's footprint (placed with the
+   coordinate's derivatives), each half a mip level finer than the single sample's (`VrShaders.HQ_LOD`), and adds
+   no sharpening of its own (`HQ_SHARPENING` is 0; the Sharpness setting applies as usual). Both values were picked
+   side by side in the headset on 12 Nov 2026 and haven't been measured since. The first tuning (a whole level
+   finer, 0.25 of sharpening) was measured against a Lanczos-3 downscale in a CPU simulation: 3.3% RMS error
+   instead of the single sample's 6.4% at 1.45 stream pixels per screen pixel and 5.7% instead of 6.9% at 2.9, with
+   92–100% of the reference's detail. The Sharpness setting alone made the single sample's error worse (10.4% at
+   60%), because it sharpens the aliasing too.
 7. **Anti screen-door** (VR Settings, off by default): the S22 Ultra's diamond PenTile panel has a green subpixel
    per pixel but red and blue only on every other one, so color detail finer than two pixels aliases into a colored
    mesh and sparkle that make the pixel grid more visible through the lenses. With it on, the eye pass takes
@@ -106,6 +121,10 @@ barrel-shaped. Presets:
 | Cardboard v1 | 60 mm | 42 mm | 0.441, 0.156 | 40° |
 | cardoO VR Go | 64 mm | 42 mm | 0.34, 0.55 | 50° |
 | No lens correction | 64 mm | 39 mm | 0, 0 | 60° |
+
+These are the viewers' own values. The app's defaults then override two of them for every viewer: Lens distance
+50 mm and Screen to lens distance 60 mm (`res/values/vr_defaults.xml`); "The viewer's own" in either setting
+brings the table's value back.
 
 **cardoO VR Go** ([specs](https://cardoo.co/vr-specs)): 40 mm aspherical lenses, 90–100° field of view, an IPD dial
 (60–70 mm) and a focus dial (37.5–46.5 mm screen to lens). The preset uses 64 mm (the user turns the IPD dial until
@@ -182,14 +201,88 @@ can be read from a viewer's Cardboard QR profile and added as a new preset later
   samplers of different types share a unit.
 - **App category:** the app is marked as a productivity app, not a game, so Samsung's Game Booster/GOS doesn't
   throttle it or lower its resolution.
-- **Streaming:** 1920×1080 at 60 fps, 40–50 Mbps HEVC. A higher desktop resolution adds detail the eye can't
-  resolve through the lenses. On the PC, 150% Windows scaling keeps text large enough to read.
+- **Streaming:** HEVC at 60 fps. With the defaults (FC 27 mode), 1920×1080 HDR at 50 Mbps; with FC 27 mode off,
+  the PC display's own resolution, with the bitrate from the table under "Resolution: match the PC" above. How
+  much of the stream's detail reaches the eye is under "How many phone pixels the screen covers" below. On the PC,
+  150% Windows scaling keeps text large enough to read.
 - **Viewer:** the S22 Ultra is a 6.8" phone (163 × 78 mm), so check that your viewer takes phones that size.
 - **Heat:** an S22 Ultra closed inside a viewer gets warm. Lower the screen brightness (the lenses make it look
   brighter anyway). If the phone throttles, stream at 60 fps rather than 120.
 
+## How many phone pixels the screen covers
+The virtual screen's width on the phone, per eye, follows from the lens model: `2 · undistort(tan(width / 2)) ·
+screen-to-lens distance / pixel size`. On the S22 Ultra at WQHD+ (each eye 1544 pixels wide):
+
+| Screen to lens distance | 60° screen | 75° screen | 90° screen |
+|---|---|---|---|
+| 39 mm (Cardboard v2's own) | 789 px | 968 px | 1,140 px |
+| 60 mm (the setting's default) | 1,214 px | 1,490 px | 1,753 px |
+
+So a 1080p stream has 1.6 pixels per screen pixel on the default 60° screen (2.4 at 39 mm) and a 4K stream 3.2
+(4.9 at 39 mm). Screenshots on 12 Nov 2026 measured about 790 at 60° and 970 at 75°: the phone's Screen to lens
+distance was at the viewer's own 39 mm then, not at the default.
+
+## Picture softness, Halve 4K frames, Ultimate High Quality (12 Nov 2026)
+
+Tuned side by side in the headset with the debug split view (below), on a native 4K desktop stream at a 75° screen:
+
+- **Picture softness** (`seekbar_vr_softness`, default 80%) adds 0 to 2 mip levels to the frame's bias
+  (`VrShaders.lodBias`: −0.5 at 0%, +1.1 at 80%). The user preferred +1.1 over −0.5, +0.3 and +0.8, and found +1.4
+  too blurry.
+- High-quality scaling no longer adds sharpening (`HQ_SHARPENING` 0.25 → 0), and its four samples are half a mip
+  level finer than the bias instead of a whole one (`HQ_LOD` −1 → −0.5).
+- **Halve 4K frames** (`checkbox_vr_halve_frame`, default off) is the halving of `VrConfig.frameTargetSize`, now a
+  choice. Screenshots at 80% softness: halved and full frames differ by 0.34/255 on average; at 0% softness the
+  full frame is sharper (Laplacian variance 2354 against 1867).
+- **Ultimate High Quality** (`checkbox_vr_ultimate_quality`, default off) forces High-quality scaling and Anti
+  screen-door on and the halving off (`PreferenceConfiguration`).
+
+## Debug tuning: A/B picture tests over adb (debug builds)
+A debug build's renderer reads the system properties `debug.vrdesktop.*` about twice a second on the GL thread
+(`VrDebugTuning`, only when `BuildConfig.DEBUG`; a release build never looks) and applies a change while the
+stream keeps running: no reinstall, no reconnect. An unset or empty property leaves the real setting alone.
+
+| Property (`debug.vrdesktop.` + ) | Values | Effect |
+|---|---|---|
+| `frame_half` | 0 / 1 | Frame texture at the stream's size / halved, instead of what `VrConfig.frameTargetSize` decides. The texture and its framebuffer are recreated and the last frame is prefiltered again. |
+| `hq` | 0 / 1 | High-quality scaling off / on |
+| `asd` | 0 / 1 | Anti screen-door off / on |
+| `sharp` | 0–100 | Sharpness, percent |
+| `hq_sharp` | 0–100 | Sharpening built into high-quality scaling, percent (unset: `HQ_SHARPENING`, 0) |
+| `lod_bias` | −4–4 | Mip level bias (unset: what Picture softness gives, `VrShaders.lodBias`); the sharpening sample stays one level above it |
+| `hq_lod` | −4–4 | Extra level offset of the four high-quality samples (unset: `HQ_LOD`, −0.5) |
+| `hq_spread` | 0–4 | Multiplier on the four samples' offsets (unset: `HQ_SPREAD`, 1) |
+| `aniso` | 1–16 | Maximum anisotropy (unset: `MAX_ANISOTROPY`, 4), capped at the GPU's |
+| `freeze_pose` | 1 | Ignore head tracking and look straight at the screen's centre, so screenshots repeat with the phone lying on a desk |
+| `split` | 1 | The real settings on the screen's left half, the properties' on its right half. Shader settings only (`hq`, `asd`, `sharp`, `hq_sharp`, `lod_bias`, `hq_lod`, `hq_spread`): `frame_half` and `aniso` belong to the one frame texture and apply to both halves. Costs both variants' samples for every pixel. |
+| `tag` | text | Only echoed in the log line. Scripts set it last (the app reads it first), so a line with the tag carries that tag's values. |
+
+Each change logs one line, with what was understood (numbers clamped, invalid values dropped) and what it did:
+
+    VR: debug tuning {tag=20261112-180000-3, frame_half=0, freeze_pose=1}: frame 3840x2160, anisotropy up to 4.0, frame texture recreated
+
+The eye program is rebuilt only when its source changes (`, shader rebuilt`); if it doesn't compile, the previous
+one stays and the line says `shader FAILED`. By hand: `adb shell setprop debug.vrdesktop.hq 0`, and
+`adb shell setprop debug.vrdesktop.hq ''` to clear. The properties last until the phone restarts.
+
+- `scripts/vr-ab.sh [variants.txt | -]` takes a screenshot per variant into `frame-logs/ab/<timestamp>/<name>.png`
+  (plus `variants.txt`: name, properties, the app's log line), waits for each variant's log line before the
+  screenshot, clears every property on exit, then runs the analyzer. Without an argument it runs a default list:
+  the current settings, `frame_half` 0 and 1, `hq=0`, `asd=0`, `hq_sharp=25`, `lod_bias=0`, `hq_lod=0`, `aniso=1`
+  and some combinations. A variants file has one `name: key=value key=value` per line. `BASE` (default
+  `freeze_pose=1`) is added to every variant; `SETTLE`, `TIMEOUT`, `OUT`, `ANALYZE=0` and `ADB` are in the
+  script's header. Show a still picture on the PC while it runs.
+- `scripts/vr-ab-analyze.py <run folder> [--size 512] [--center X,Y] [--sheet-size 256] [--columns N]` crops the
+  same square around the left eye's centre from every screenshot and prints, per variant: `grid` (mean difference
+  between adjacent pixels' luma, horizontal plus vertical: pixel grid and aliasing), `gridR`/`gridB` (the same for
+  red and blue: PenTile sparkle), `lapvar` (Laplacian variance: sharpness), `over%` (overshoot at strong edges, in
+  percent of the step), `hf%` (share of spectral energy above 0.375 cycles/pixel) and `diff` (mean difference to
+  the first variant; 0 means nothing changed). It also writes `contact-sheet.png`: the crops' middles at 3×
+  (nearest neighbour), labelled. A screenshot is the picture before the panel's subpixels and the lenses, so these
+  measure what the renderer sends, not what the eye sees.
+
 ## Next steps
 - Head-pose prediction (extrapolate about 1 frame from the gyroscope) to cut motion-to-photon lag further.
-- Viewer profiles from Cardboard QR codes, and an IPD setting.
+- Viewer profiles from Cardboard QR codes.
 - A gaze cursor or a mouse-pointer overlay, for using the phone without the PC's mouse.
 - A curved-screen option for very wide screens.

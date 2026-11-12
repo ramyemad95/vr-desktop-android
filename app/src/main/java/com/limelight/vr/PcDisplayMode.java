@@ -6,12 +6,14 @@ import java.util.regex.Pattern;
 
 /**
  * The PC display's current mode, as served by the VR Desktop Host app (docs/PROTOCOL.md, v1:
- * {@code GET /vr/v1/mode} on TCP {@link #PORT}). With "Resolution: match the PC", the stream uses this resolution, so
+ * {@code GET} {@link #PATH} on TCP {@link #PORT}). With "Resolution: match the PC", the stream uses this resolution, so
  * a game in exclusive fullscreen at 1080p is streamed at 1080p rather than upscaled to the desktop's 4K.
  */
 public final class PcDisplayMode {
     public static final int PORT = 48100;
     public static final String PATH = "/vr/v1/mode";
+    /** The host app's one-second stats for the frame log (docs/PROTOCOL.md, v2). */
+    public static final String STATS_PATH = "/vr/v2/stats";
 
     /** Largest stream the phone's HEVC decoder is set up for; anything bigger falls back to the user's setting. */
     static final int MAX_WIDTH = 4096, MAX_HEIGHT = 2304;
@@ -104,22 +106,22 @@ public final class PcDisplayMode {
      * @return null unless the status is 200 and the body has a valid mode
      */
     public static PcDisplayMode parseHttpResponse(String raw) {
-        if (raw == null) {
-            return null;
-        }
-        int lineEnd = raw.indexOf("\r\n");
-        String statusLine = lineEnd >= 0 ? raw.substring(0, lineEnd) : raw;
-        String[] parts = statusLine.split(" ");
-        if (parts.length < 2 || !parts[0].startsWith("HTTP/1.") || !"200".equals(parts[1])) {
-            return null;
-        }
-        int bodyStart = raw.indexOf("\r\n\r\n");
-        return parseJson(bodyStart >= 0 ? raw.substring(bodyStart + 4) : "");
+        PcModeClient.Response response = PcModeClient.Response.parse(raw);
+        return response != null && response.status == 200 ? parseJson(response.body) : null;
     }
 
-    /** The request line and headers for {@code GET /vr/v1/mode}, optionally as a long poll after {@code afterSeq}. */
+    /** The mode endpoint's path, optionally as a long poll for anything after {@code afterSeq}. */
+    static String modePath(long afterSeq) {
+        return afterSeq > 0 ? PATH + "?after=" + afterSeq : PATH;
+    }
+
+    /** The request line and headers for the mode endpoint, optionally as a long poll after {@code afterSeq}. */
     public static String httpRequest(String host, long afterSeq) {
-        String path = afterSeq > 0 ? PATH + "?after=" + afterSeq : PATH;
+        return httpGet(host, modePath(afterSeq));
+    }
+
+    /** The request line and headers for {@code GET path} on the host app's port. */
+    static String httpGet(String host, String path) {
         return "GET " + path + " HTTP/1.1\r\nHost: " + host + ":" + PORT + "\r\nConnection: close\r\n" +
                 "Accept: application/json\r\n\r\n";
     }

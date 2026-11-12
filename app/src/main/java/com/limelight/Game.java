@@ -40,6 +40,7 @@ import com.limelight.vr.ModeFollower;
 import com.limelight.vr.PcDisplayMode;
 import com.limelight.vr.PcModeClient;
 import com.limelight.vr.FramePacer;
+import com.limelight.vr.FrameLogRecorder;
 import com.limelight.vr.PictureSettings;
 import com.limelight.vr.VrConfig;
 import com.limelight.vr.VrStats;
@@ -159,6 +160,7 @@ public class Game extends Activity implements SurfaceHolder.Callback,
     // game changes it (main thread, except the client's watcher)
     private PcModeClient pcModeClient;
     private FramePacer framePacer; // Smooth video in VR, or null
+    private FrameLogRecorder frameLogRecorder; // Frame timing log, or null
     private PcDisplayMode streamPcMode;
     private ModeFollower modeFollower;
     private boolean restartingForPcMode;
@@ -258,6 +260,9 @@ public class Game extends Activity implements SurfaceHolder.Callback,
             framePacer = new FramePacer(prefConfig.vrSmoothVideoFrames, prefConfig.fps);
             LimeLog.info("VR: smooth video with " + prefConfig.vrSmoothVideoFrames + " frame(s) of buffer (" +
                     (framePacer.bufferNanos() / 1_000_000) + " ms)");
+        }
+        if (prefConfig.frameLog) {
+            startFrameLog();
         }
 
         // Enter landscape unless we're on a square screen
@@ -434,6 +439,7 @@ public class Game extends Activity implements SurfaceHolder.Callback,
                 glPrefs.glRenderer,
                 this);
         decoderRenderer.setFramePacer(framePacer);
+        decoderRenderer.setFrameLog(frameLogRecorder != null ? frameLogRecorder.log() : null);
 
         // Don't stream HDR if the decoder can't support it
         if (willStreamHdr && !decoderRenderer.isHevcMain10Hdr10Supported() && !decoderRenderer.isAv1Main10Supported()) {
@@ -672,6 +678,41 @@ public class Game extends Activity implements SurfaceHolder.Callback,
         }
     }
 
+    /** Frame timing log: records every frame of this stream, with the settings it runs with (docs/FRAME-LOG.md). */
+    private void startFrameLog() {
+        frameLogRecorder = FrameLogRecorder.start(this, getIntent().getStringExtra(EXTRA_HOST), prefConfig.fps,
+                framePacer != null ? framePacer.bufferNanos() : 0, prefConfig.vrMode);
+        if (frameLogRecorder == null) {
+            return;
+        }
+        frameLogRecorder.header("settings", String.format((Locale) null,
+                "%dx%d %d fps %d kbps, format %s, HDR %b, FC 27 mode %b, match the PC %b, VR %b, smooth video %d, " +
+                        "frame pacing %d, refresh %d, HDR screen %b, HQ scaling %b, anti screen-door %b, 3D %s, " +
+                        "stats panel %b",
+                prefConfig.width, prefConfig.height, prefConfig.fps, prefConfig.bitrate, prefConfig.videoFormat,
+                prefConfig.enableHdr, prefConfig.vrFc27Mode, prefConfig.vrMatchPcResolution, prefConfig.vrMode,
+                prefConfig.vrSmoothVideoFrames, prefConfig.framePacing, prefConfig.vrRefreshRate,
+                prefConfig.vrHdrScreen, prefConfig.vrHqScaling, prefConfig.vrAntiScreenDoor, prefConfig.vrStereoMode,
+                prefConfig.vrStatsPanel));
+        Display display = getWindowManager().getDefaultDisplay();
+        StringBuilder modes = new StringBuilder();
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            for (Display.Mode mode : display.getSupportedModes()) {
+                modes.append(modes.length() == 0 ? "" : " ").append(mode.getPhysicalWidth()).append('x')
+                        .append(mode.getPhysicalHeight()).append('@').append(Math.round(mode.getRefreshRate()));
+            }
+        }
+        frameLogRecorder.header("display", "refresh " + display.getRefreshRate() + " Hz, modes " + modes);
+    }
+
+    /** Frame timing log: something that matters for the timeline (connection, HDR, focus). Any thread. */
+    private void logFrameEvent(String text) {
+        FrameLogRecorder recorder = frameLogRecorder;
+        if (recorder != null) {
+            recorder.log().event(System.nanoTime(), text);
+        }
+    }
+
     private void addVrView() {
         // The VR view covers the whole screen (we lay out under the notch), so lens positions are
         // computed against the real display size
@@ -684,8 +725,10 @@ public class Game extends Activity implements SurfaceHolder.Callback,
                         metrics.xdpi, metrics.ydpi, metrics.densityDpi),
                 VrConfig.sharpnessFromPercent(prefConfig.vrSharpness), prefConfig.vrRecenterVertically,
                 prefConfig.vrNativeColors, new PictureSettings(prefConfig.vrHdrWhiteNits, prefConfig.vrHdrKnee,
-                        prefConfig.vrColorPercent / 100f, prefConfig.vrContrastGamma), prefConfig.vrAntiScreenDoor,
-                prefConfig.vrStereoMode, prefConfig.vrHqScaling);
+                        prefConfig.vrColorPercent / 100f, prefConfig.vrContrastGamma, prefConfig.vrHdrPeakNits),
+                prefConfig.vrAntiScreenDoor,
+                prefConfig.vrStereoMode, prefConfig.vrHqScaling,
+                VrConfig.softnessFromPercent(prefConfig.vrSoftness), prefConfig.vrHalveFrame);
 
         // Inside a headset the light sensor is covered, so automatic brightness dims the screen; this setting holds
         // it at a fixed level while streaming
@@ -717,6 +760,7 @@ public class Game extends Activity implements SurfaceHolder.Callback,
             }
         });
         vrView.setFramePacer(framePacer);
+        vrView.setFrameLog(frameLogRecorder != null ? frameLogRecorder.log() : null);
 
         // The StreamView stays in place underneath, so it keeps input focus for keyboards and mice
         FrameLayout parent = (FrameLayout) streamView.getParent();
@@ -940,6 +984,7 @@ public class Game extends Activity implements SurfaceHolder.Callback,
     @Override
     public void onWindowFocusChanged(boolean hasFocus) {
         super.onWindowFocusChanged(hasFocus);
+        logFrameEvent(hasFocus ? "window got focus" : "window lost focus (a notification, dialog or other app)");
 
         // We can't guarantee the state of modifiers keys which may have
         // lifted while focus was not on us. Clear the modifier state.
@@ -1236,6 +1281,9 @@ public class Game extends Activity implements SurfaceHolder.Callback,
         super.onDestroy();
 
         stopFollowingPcMode();
+        if (frameLogRecorder != null) {
+            frameLogRecorder.close();
+        }
 
         if (controllerHandler != null) {
             controllerHandler.destroy();
@@ -2441,6 +2489,10 @@ public class Game extends Activity implements SurfaceHolder.Callback,
 
     private void stopConnection() {
         stopFollowingPcMode();
+        logFrameEvent("stream stopping");
+        if (frameLogRecorder != null) {
+            frameLogRecorder.close();
+        }
         if (connecting || connected) {
             connecting = connected = false;
             updatePipAutoEnter();
@@ -2505,6 +2557,7 @@ public class Game extends Activity implements SurfaceHolder.Callback,
 
     @Override
     public void connectionTerminated(final int errorCode) {
+        logFrameEvent("connection terminated, error " + errorCode);
         // Perform a connection test if the failure could be due to a blocked port
         // This does network I/O, so don't do it on the main thread.
         final int portFlags = MoonBridge.getPortFlagsFromTerminationErrorCode(errorCode);
@@ -2588,6 +2641,7 @@ public class Game extends Activity implements SurfaceHolder.Callback,
 
     @Override
     public void connectionStatusUpdate(final int connectionStatus) {
+        logFrameEvent("connection status " + (connectionStatus == MoonBridge.CONN_STATUS_POOR ? "POOR" : "OKAY"));
         runOnUiThread(new Runnable() {
             @Override
             public void run() {
@@ -2623,6 +2677,7 @@ public class Game extends Activity implements SurfaceHolder.Callback,
 
     @Override
     public void connectionStarted() {
+        logFrameEvent("connection started");
         runOnUiThread(new Runnable() {
             @Override
             public void run() {
@@ -2711,10 +2766,11 @@ public class Game extends Activity implements SurfaceHolder.Callback,
     @Override
     public void setHdrMode(boolean enabled, byte[] hdrMetadata) {
         LimeLog.info("Display HDR mode: " + (enabled ? "enabled" : "disabled"));
+        logFrameEvent("PC HDR mode " + (enabled ? "on" : "off"));
         decoderRenderer.setHdrMode(enabled, hdrMetadata);
         VrStreamView view = vrView;
         if (view != null) {
-            // The VR view draws to an SDR surface, so it tone-maps HDR10 frames itself
+            // The VR view tone-maps HDR10 frames to its SDR surface itself, or passes them to the phone's HDR screen
             view.setHdrMode(enabled, hdrMetadata);
         }
     }

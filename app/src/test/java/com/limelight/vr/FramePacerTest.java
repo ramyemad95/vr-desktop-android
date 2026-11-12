@@ -35,7 +35,7 @@ public class FramePacerTest {
         }
 
         @Override
-        public void drop(int index) {
+        public void drop(int index, boolean overflow) {
             assertTrue("released twice: " + index, released.add(index));
             if (counting) {
                 dropped++;

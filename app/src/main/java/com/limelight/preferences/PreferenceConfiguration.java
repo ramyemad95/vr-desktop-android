@@ -2,12 +2,15 @@ package com.limelight.preferences;
 
 import android.content.Context;
 import android.content.SharedPreferences;
+import android.content.res.Resources;
 import android.content.pm.PackageManager;
 import android.os.Build;
 import android.preference.PreferenceManager;
 import android.view.Display;
 
+import com.limelight.R;
 import com.limelight.nvstream.jni.MoonBridge;
+import com.limelight.vr.FramePacer;
 import com.limelight.vr.PcDisplayMode;
 import com.limelight.vr.StereoMode;
 
@@ -72,6 +75,7 @@ public class PreferenceConfiguration {
     private static final String VR_HEAD_TRACKING_PREF_STRING = "checkbox_vr_head_tracking";
     private static final String VR_REFRESH_RATE_PREF_STRING = "list_vr_refresh_rate";
     private static final String VR_STATS_PANEL_PREF_STRING = "checkbox_vr_stats_panel";
+    private static final String FRAME_LOG_PREF_STRING = "checkbox_frame_log";
     private static final String VR_SHARPNESS_PREF_STRING = "seekbar_vr_sharpness";
     private static final String VR_RECENTER_VERTICAL_PREF_STRING = "checkbox_vr_recenter_vertical";
     private static final String VR_LENS_DISTANCE_PREF_STRING = "list_vr_lens_distance";
@@ -82,8 +86,12 @@ public class PreferenceConfiguration {
     private static final String VR_SMOOTH_VIDEO_PREF_STRING = "list_vr_smooth_video";
     private static final String VR_BRIGHTNESS_PREF_STRING = "list_vr_brightness";
     private static final String VR_HDR_SCREEN_PREF_STRING = "checkbox_vr_hdr_screen";
+    private static final String VR_HDR_HIGHLIGHTS_PREF_STRING = "list_vr_hdr_highlights";
     private static final String VR_ANTI_SCREEN_DOOR_PREF_STRING = "checkbox_vr_anti_screen_door";
     private static final String VR_HQ_SCALING_PREF_STRING = "checkbox_vr_hq_scaling";
+    private static final String VR_SOFTNESS_PREF_STRING = "seekbar_vr_softness";
+    private static final String VR_HALVE_FRAME_PREF_STRING = "checkbox_vr_halve_frame";
+    private static final String VR_ULTIMATE_QUALITY_PREF_STRING = "checkbox_vr_ultimate_quality";
     private static final String VR_3D_MODE_PREF_STRING = "list_vr_3d_mode";
     private static final String VR_HDR_WHITE_PREF_STRING = "list_vr_hdr_white";
     private static final String VR_HDR_COMPRESSION_PREF_STRING = "list_vr_hdr_compression";
@@ -129,29 +137,6 @@ public class PreferenceConfiguration {
     private static final boolean DEFAULT_ABSOLUTE_MOUSE_MODE = false;
     private static final boolean DEFAULT_ENABLE_AUDIO_FX = false;
     private static final boolean DEFAULT_REDUCE_REFRESH_RATE = false;
-    private static final boolean DEFAULT_VR_MODE = true;
-    private static final String DEFAULT_VR_VIEWER = "cardboard_v2";
-    private static final int DEFAULT_VR_SCREEN_SIZE = 60; // Degrees of horizontal view
-    private static final boolean DEFAULT_VR_HEAD_TRACKING = true;
-    private static final String DEFAULT_VR_REFRESH_RATE = "60"; // Hz; "0" is the highest the display offers
-    private static final boolean DEFAULT_VR_STATS_PANEL = false;
-    private static final int DEFAULT_VR_SHARPNESS = 30; // Percent; 0 is off
-    private static final boolean DEFAULT_VR_RECENTER_VERTICAL = true;
-    private static final String DEFAULT_VR_LENS_DISTANCE = "50"; // mm; "0" is the viewer's own
-    private static final String DEFAULT_VR_SCREEN_DISTANCE = "60"; // mm; "0" is the viewer's own
-    private static final boolean DEFAULT_VR_MATCH_PC_RESOLUTION = true;
-    private static final boolean DEFAULT_VR_FC27_MODE = true;
-    private static final String DEFAULT_VR_COLOR_SPACE = "auto"; // sRGB, or "native" (Display P3)
-    private static final String DEFAULT_VR_SMOOTH_VIDEO = "1"; // Frames of buffer; 0 is off
-    private static final String DEFAULT_VR_BRIGHTNESS = "0"; // Percent; 0 leaves it to the system
-    private static final boolean DEFAULT_VR_HDR_SCREEN = false;
-    private static final boolean DEFAULT_VR_ANTI_SCREEN_DOOR = false;
-    private static final boolean DEFAULT_VR_HQ_SCALING = false;
-    private static final String DEFAULT_VR_3D_MODE = "off"; // Or "sbs", "sbs_rl", "tb"; see StereoMode
-    private static final String DEFAULT_VR_HDR_WHITE = "203"; // Nits, ITU-R BT.2408
-    private static final String DEFAULT_VR_HDR_COMPRESSION = "0.75"; // Knee, relative to white
-    private static final int DEFAULT_VR_COLOR = 100; // Percent saturation
-    private static final String DEFAULT_VR_CONTRAST = "2.2"; // Gamma to imitate; the phone's own is 2.2
     private static final boolean DEFAULT_FULL_RANGE = false;
     private static final boolean DEFAULT_GAMEPAD_TOUCHPAD_AS_MOUSE = false;
     private static final boolean DEFAULT_GAMEPAD_MOTION_SENSORS = true;
@@ -189,6 +174,7 @@ public class PreferenceConfiguration {
     public boolean vrHeadTracking;
     public int vrRefreshRate; // Hz, or 0 for the highest the display offers
     public boolean vrStatsPanel;
+    public boolean frameLog; // Record every frame's timing (and why it stuttered) to a file on the phone
     public int vrSharpness; // Percent
     public boolean vrRecenterVertically;
     public int vrLensDistanceMm; // 0 for the viewer's own
@@ -199,7 +185,11 @@ public class PreferenceConfiguration {
     public int vrSmoothVideoFrames; // Frames of buffer for even frame pacing in VR; 0 shows each frame at once
     public int vrBrightnessPercent; // Screen brightness while streaming in VR; 0 leaves it to the system
     public boolean vrHdrScreen; // Draw HDR to the phone's HDR screen instead of converting it to SDR
+    public float vrHdrPeakNits; // HDR screen: the brightness whites are limited to, or 0 for as the game sends them
     public boolean vrAntiScreenDoor; // Soften color detail to the panel's red/blue resolution, keep brightness sharp
+    public int vrSoftness; // Percent; how coarse a version of the frame each screen pixel reads
+    public boolean vrUltimateQuality; // Picture quality before speed and battery; forces the settings below
+    public boolean vrHalveFrame; // Halve a stream much larger than an eye's screen before drawing it
     public boolean vrHqScaling; // Four samples per pixel and built-in sharpening when scaling the picture
     public StereoMode vrStereoMode; // 3D Mode: how a 3D frame is split between the eyes
     public float vrHdrWhiteNits; // HDR brightness that becomes the phone's white
@@ -525,6 +515,8 @@ public class PreferenceConfiguration {
 
     public static PreferenceConfiguration readPreferences(Context context) {
         SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(context);
+        // The VR settings' defaults are in res/values/vr_defaults.xml, which the settings screen reads too
+        Resources res = context.getResources();
         PreferenceConfiguration config = new PreferenceConfiguration();
 
         // Migrate legacy preferences to the new locations
@@ -682,55 +674,63 @@ public class PreferenceConfiguration {
         config.gamepadMotionSensors = prefs.getBoolean(GAMEPAD_MOTION_SENSORS_PREF_STRING, DEFAULT_GAMEPAD_MOTION_SENSORS);
         config.gamepadMotionSensorsFallbackToDevice = prefs.getBoolean(GAMEPAD_MOTION_FALLBACK_PREF_STRING, DEFAULT_GAMEPAD_MOTION_FALLBACK);
 
-        config.vrMode = prefs.getBoolean(VR_MODE_PREF_STRING, DEFAULT_VR_MODE);
-        config.vrViewer = prefs.getString(VR_VIEWER_PREF_STRING, DEFAULT_VR_VIEWER);
-        config.vrScreenSizeDegrees = prefs.getInt(VR_SCREEN_SIZE_PREF_STRING, DEFAULT_VR_SCREEN_SIZE);
-        config.vrHeadTracking = prefs.getBoolean(VR_HEAD_TRACKING_PREF_STRING, DEFAULT_VR_HEAD_TRACKING);
-        config.vrStatsPanel = prefs.getBoolean(VR_STATS_PANEL_PREF_STRING, DEFAULT_VR_STATS_PANEL);
-        config.vrSharpness = prefs.getInt(VR_SHARPNESS_PREF_STRING, DEFAULT_VR_SHARPNESS);
-        config.vrRecenterVertically = prefs.getBoolean(VR_RECENTER_VERTICAL_PREF_STRING, DEFAULT_VR_RECENTER_VERTICAL);
-        config.vrMatchPcResolution = prefs.getBoolean(VR_MATCH_PC_RESOLUTION_PREF_STRING, DEFAULT_VR_MATCH_PC_RESOLUTION);
-        config.vrNativeColors = !"auto".equals(prefs.getString(VR_COLOR_SPACE_PREF_STRING, DEFAULT_VR_COLOR_SPACE));
-        config.vrBrightnessPercent = (int) parseFloatPref(prefs, VR_BRIGHTNESS_PREF_STRING, DEFAULT_VR_BRIGHTNESS);
-        config.vrHdrScreen = prefs.getBoolean(VR_HDR_SCREEN_PREF_STRING, DEFAULT_VR_HDR_SCREEN);
-        config.vrAntiScreenDoor = prefs.getBoolean(VR_ANTI_SCREEN_DOOR_PREF_STRING, DEFAULT_VR_ANTI_SCREEN_DOOR);
-        config.vrHqScaling = prefs.getBoolean(VR_HQ_SCALING_PREF_STRING, DEFAULT_VR_HQ_SCALING);
-        config.vrStereoMode = StereoMode.fromPreference(prefs.getString(VR_3D_MODE_PREF_STRING, DEFAULT_VR_3D_MODE));
-        config.vrHdrWhiteNits = parseFloatPref(prefs, VR_HDR_WHITE_PREF_STRING, DEFAULT_VR_HDR_WHITE);
-        config.vrHdrKnee = parseFloatPref(prefs, VR_HDR_COMPRESSION_PREF_STRING, DEFAULT_VR_HDR_COMPRESSION);
-        config.vrColorPercent = prefs.getInt(VR_COLOR_PREF_STRING, DEFAULT_VR_COLOR);
-        config.vrContrastGamma = parseFloatPref(prefs, VR_CONTRAST_PREF_STRING, DEFAULT_VR_CONTRAST);
-        try {
-            config.vrSmoothVideoFrames = Math.max(0, Math.min(2,
-                    Integer.parseInt(prefs.getString(VR_SMOOTH_VIDEO_PREF_STRING, DEFAULT_VR_SMOOTH_VIDEO))));
-        } catch (NumberFormatException e) {
-            config.vrSmoothVideoFrames = 1;
+        config.vrMode = prefs.getBoolean(VR_MODE_PREF_STRING, res.getBoolean(R.bool.default_checkbox_vr_mode));
+        config.vrViewer = prefs.getString(VR_VIEWER_PREF_STRING, res.getString(R.string.default_list_vr_viewer));
+        config.vrScreenSizeDegrees = prefs.getInt(VR_SCREEN_SIZE_PREF_STRING, res.getInteger(R.integer.default_seekbar_vr_screen_size));
+        config.vrHeadTracking = prefs.getBoolean(VR_HEAD_TRACKING_PREF_STRING, res.getBoolean(R.bool.default_checkbox_vr_head_tracking));
+        config.vrStatsPanel = prefs.getBoolean(VR_STATS_PANEL_PREF_STRING, res.getBoolean(R.bool.default_checkbox_vr_stats_panel));
+        config.frameLog = prefs.getBoolean(FRAME_LOG_PREF_STRING, res.getBoolean(R.bool.default_checkbox_frame_log));
+        config.vrSharpness = prefs.getInt(VR_SHARPNESS_PREF_STRING, res.getInteger(R.integer.default_seekbar_vr_sharpness));
+        config.vrRecenterVertically = prefs.getBoolean(VR_RECENTER_VERTICAL_PREF_STRING, res.getBoolean(R.bool.default_checkbox_vr_recenter_vertical));
+        config.vrMatchPcResolution = prefs.getBoolean(VR_MATCH_PC_RESOLUTION_PREF_STRING, res.getBoolean(R.bool.default_checkbox_vr_match_pc_resolution));
+        config.vrNativeColors = !"auto".equals(prefs.getString(VR_COLOR_SPACE_PREF_STRING, res.getString(R.string.default_list_vr_color_space)));
+        config.vrBrightnessPercent = (int) parseFloatPref(prefs, VR_BRIGHTNESS_PREF_STRING, res.getString(R.string.default_list_vr_brightness));
+        config.vrHdrScreen = prefs.getBoolean(VR_HDR_SCREEN_PREF_STRING, res.getBoolean(R.bool.default_checkbox_vr_hdr_screen));
+        config.vrHdrPeakNits = parseFloatPref(prefs, VR_HDR_HIGHLIGHTS_PREF_STRING, res.getString(R.string.default_list_vr_hdr_highlights));
+        config.vrAntiScreenDoor = prefs.getBoolean(VR_ANTI_SCREEN_DOOR_PREF_STRING, res.getBoolean(R.bool.default_checkbox_vr_anti_screen_door));
+        config.vrHqScaling = prefs.getBoolean(VR_HQ_SCALING_PREF_STRING, res.getBoolean(R.bool.default_checkbox_vr_hq_scaling));
+        config.vrSoftness = prefs.getInt(VR_SOFTNESS_PREF_STRING, res.getInteger(R.integer.default_seekbar_vr_softness));
+        config.vrHalveFrame = prefs.getBoolean(VR_HALVE_FRAME_PREF_STRING, res.getBoolean(R.bool.default_checkbox_vr_halve_frame));
+        config.vrUltimateQuality = prefs.getBoolean(VR_ULTIMATE_QUALITY_PREF_STRING, res.getBoolean(R.bool.default_checkbox_vr_ultimate_quality));
+        if (config.vrUltimateQuality) {
+            // Ultimate High Quality: every picture option that costs graphics work is on, whatever its own switch
+            // says. Picture softness and Sharpness are taste, so they stay as set.
+            config.vrHqScaling = true;
+            config.vrAntiScreenDoor = true;
+            config.vrHalveFrame = false;
         }
+        config.vrStereoMode = StereoMode.fromPreference(prefs.getString(VR_3D_MODE_PREF_STRING, res.getString(R.string.default_list_vr_3d_mode)));
+        config.vrHdrWhiteNits = parseFloatPref(prefs, VR_HDR_WHITE_PREF_STRING, res.getString(R.string.default_list_vr_hdr_white));
+        config.vrHdrKnee = parseFloatPref(prefs, VR_HDR_COMPRESSION_PREF_STRING, res.getString(R.string.default_list_vr_hdr_compression));
+        config.vrColorPercent = prefs.getInt(VR_COLOR_PREF_STRING, res.getInteger(R.integer.default_seekbar_vr_color));
+        config.vrContrastGamma = parseFloatPref(prefs, VR_CONTRAST_PREF_STRING, res.getString(R.string.default_list_vr_contrast));
+        config.vrSmoothVideoFrames = Math.max(0, Math.min(FramePacer.MAX_BUFFER_FRAMES,
+                (int) parseFloatPref(prefs, VR_SMOOTH_VIDEO_PREF_STRING, res.getString(R.string.default_list_vr_smooth_video))));
         try {
-            config.vrLensDistanceMm = Integer.parseInt(prefs.getString(VR_LENS_DISTANCE_PREF_STRING, DEFAULT_VR_LENS_DISTANCE));
+            config.vrLensDistanceMm = Integer.parseInt(prefs.getString(VR_LENS_DISTANCE_PREF_STRING, res.getString(R.string.default_list_vr_lens_distance)));
         } catch (NumberFormatException e) {
             config.vrLensDistanceMm = 0;
         }
         try {
-            config.vrScreenDistanceMm = Float.parseFloat(prefs.getString(VR_SCREEN_DISTANCE_PREF_STRING, DEFAULT_VR_SCREEN_DISTANCE));
+            config.vrScreenDistanceMm = Float.parseFloat(prefs.getString(VR_SCREEN_DISTANCE_PREF_STRING, res.getString(R.string.default_list_vr_screen_distance)));
         } catch (NumberFormatException e) {
             config.vrScreenDistanceMm = 0;
         }
         try {
-            config.vrRefreshRate = Integer.parseInt(prefs.getString(VR_REFRESH_RATE_PREF_STRING, DEFAULT_VR_REFRESH_RATE));
+            config.vrRefreshRate = Integer.parseInt(prefs.getString(VR_REFRESH_RATE_PREF_STRING, res.getString(R.string.default_list_vr_refresh_rate)));
         } catch (NumberFormatException e) {
             config.vrRefreshRate = 0;
         }
         if (config.vrMode) {
             // These don't work inside a VR viewer: a picture-in-picture window can't be viewed through the
             // lenses, and the on-screen controls can't be touched. HDR does: the VR renderer tone-maps HDR10
-            // to its SDR surface (HdrToneMap).
+            // to its SDR surface (HdrToneMap), or draws it to the phone's HDR screen.
             config.enablePip = false;
             config.onscreenController = false;
 
             // FC 27 mode: the game runs fullscreen at 1080p in HDR, so stream exactly that from the start, and
             // don't follow the PC's display mode, so starting or leaving the game doesn't reconnect the stream
-            config.vrFc27Mode = prefs.getBoolean(VR_FC27_MODE_PREF_STRING, DEFAULT_VR_FC27_MODE);
+            config.vrFc27Mode = prefs.getBoolean(VR_FC27_MODE_PREF_STRING, res.getBoolean(R.bool.default_checkbox_vr_fc27_mode));
             if (config.vrFc27Mode) {
                 config.width = 1920;
                 config.height = 1080;
