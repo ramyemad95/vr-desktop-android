@@ -1,0 +1,127 @@
+apply plugin: 'com.android.application'
+
+android {
+    ndkVersion "29.0.14206865"
+
+    compileSdk 37
+
+    namespace 'com.limelight'
+
+    defaultConfig {
+        minSdk 21
+        targetSdk 36
+
+        // Our own version line; the Moonlight release this is based on is in README.md
+        versionName "0.1.0"
+        versionCode = 1
+
+        // Generate native debug symbols to allow Google Play to symbolicate our native crashes
+        ndk.debugSymbolLevel = 'FULL'
+    }
+
+    flavorDimensions.add("root")
+
+    buildFeatures {
+        buildConfig = true
+        resValues = true
+    }
+
+    productFlavors {
+        root {
+            // Android O has native mouse capture, so don't show the rooted
+            // version to devices running O on the Play Store.
+            maxSdk 25
+
+            externalNativeBuild {
+                ndkBuild {
+                    arguments "PRODUCT_FLAVOR=root"
+                }
+            }
+
+            applicationId "io.github.ramyemad95.vrdesktop.root"
+            dimension "root"
+            buildConfigField "boolean", "ROOT_BUILD", "true"
+        }
+
+        nonRoot {
+            externalNativeBuild {
+                ndkBuild {
+                    arguments "PRODUCT_FLAVOR=nonRoot"
+                }
+            }
+
+            applicationId "io.github.ramyemad95.vrdesktop"
+            dimension "root"
+            buildConfigField "boolean", "ROOT_BUILD", "false"
+        }
+    }
+
+    compileOptions {
+        encoding "UTF-8"
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+        coreLibraryDesugaringEnabled true
+    }
+
+    lint {
+        disable 'MissingTranslation'
+        lintConfig file('lint.xml')
+    }
+
+    bundle {
+        language {
+            // Avoid splitting by language, since we allow users
+            // to manually switch language in settings.
+            enableSplit = false
+        }
+        density {
+            // FIXME: This should not be necessary but we get
+            // weird crashes due to missing drawable resources
+            // when this split is enabled.
+            enableSplit = false
+        }
+    }
+
+    buildTypes {
+        debug {
+            applicationIdSuffix ".debug"
+            resValue "string", "app_label", "VR Desktop (Debug)"
+            resValue "string", "app_label_root", "VR Desktop (Root Debug)"
+        }
+        release {
+            // VR Desktop has its own applicationId (set in the flavors above), as Moonlight's authors ask
+            // of forks, so release builds don't need Moonlight's ".unofficial" suffix.
+            resValue "string", "app_label", "VR Desktop"
+            resValue "string", "app_label_root", "VR Desktop (Root)"
+
+            minifyEnabled true
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+        }
+    }
+
+    externalNativeBuild {
+        ndkBuild {
+            path "src/main/jni/Android.mk"
+        }
+    }
+
+    packaging {
+        resources {
+            // BouncyCastle includes duplicate LICENSE.md files
+            excludes += '/META-INF/*.md'
+        }
+    }
+}
+
+dependencies {
+    implementation 'org.bouncycastle:bcprov-jdk18on:1.85.2'
+    implementation 'org.bouncycastle:bcpkix-jdk18on:1.85'
+    implementation 'org.jcodec:jcodec:0.2.5'
+    implementation 'com.squareup.okhttp3:okhttp:5.5.0'
+    implementation 'org.jmdns:jmdns:3.6.3'
+    implementation 'com.github.cgutman:ShieldControllerExtensions:1.0.1'
+
+    coreLibraryDesugaring 'com.android.tools:desugar_jdk_libs:2.1.5'
+
+    testImplementation 'junit:junit:4.13.2'
+}

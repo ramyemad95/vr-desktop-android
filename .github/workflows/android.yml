@@ -1,0 +1,44 @@
+name: Android build
+
+on:
+  push:
+    branches: [main, 'claude/**']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - name: Install the SDK packages the project pins
+        run: |
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-37.0" "build-tools;37.0.0" "ndk;29.0.14206865" > /dev/null
+
+      # Also validates the Gradle wrapper's checksum.
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Unit tests
+        run: ./gradlew --no-daemon testNonRootDebugUnitTest
+
+      - name: Build debug APK
+        run: ./gradlew --no-daemon assembleNonRootDebug
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: vr-desktop-debug-apk
+          path: app/build/outputs/apk/nonRoot/debug/*.apk
+          if-no-files-found: error

@@ -1,0 +1,142 @@
+package com.limelight.vr;
+
+/** Everything the VR renderer needs to know up front. */
+public final class VrConfig {
+    public final ViewerProfile viewer;
+    /** How much of the user's horizontal view the virtual screen covers. */
+    public final float screenWidthDegrees;
+    /** Stream resolution; sets the virtual screen's aspect ratio. */
+    public final int videoWidth, videoHeight;
+    /** Physical size of one phone screen pixel. */
+    public final float metersPerPixel;
+    /** Strength of the unsharp mask on the video, 0 (off) to 1. */
+    public final float sharpness;
+    /** A re-center also follows the head's pitch, so the screen goes where the user looks, up or down. */
+    public final boolean recenterVertically;
+    /** HDR video is converted to the panel's own wide color range (Display P3) instead of sRGB; see {@link HdrToneMap}. */
+    public final boolean nativeColors;
+    /** HDR white level and compression, color and contrast. */
+    public final PictureSettings picture;
+    /** Softens color (not brightness) detail to what a PenTile panel's red and blue subpixels can show. */
+    public final boolean antiScreenDoor;
+    /** 3D Mode: how a 3D frame is split between the eyes, or {@link StereoMode#OFF}. */
+    public final StereoMode stereoMode;
+    /** Four samples per pixel and built-in sharpening when the picture is scaled to the screen; see {@link VrShaders}. */
+    public final boolean hqScaling;
+    /**
+     * Picture softness, 0 (as sharp as the scaling goes) to 1: how coarse a version of the frame each screen pixel
+     * reads; see {@link VrShaders#lodBias}.
+     */
+    public final float softness;
+    /** Whether a stream much larger than an eye's screen is halved on the way in; see {@link #frameTargetSize}. */
+    public final boolean halveLargeFrames;
+
+    public VrConfig(ViewerProfile viewer, float screenWidthDegrees, int videoWidth, int videoHeight, float metersPerPixel,
+                    float sharpness, boolean recenterVertically, boolean nativeColors, PictureSettings picture,
+                    boolean antiScreenDoor, StereoMode stereoMode, boolean hqScaling, float softness,
+                    boolean halveLargeFrames) {
+        this.viewer = viewer;
+        this.screenWidthDegrees = screenWidthDegrees;
+        this.videoWidth = videoWidth;
+        this.videoHeight = videoHeight;
+        this.metersPerPixel = metersPerPixel;
+        this.sharpness = Math.max(0f, Math.min(1f, sharpness));
+        this.recenterVertically = recenterVertically;
+        this.nativeColors = nativeColors;
+        this.picture = picture != null ? picture : PictureSettings.STANDARD;
+        this.antiScreenDoor = antiScreenDoor;
+        this.stereoMode = stereoMode != null ? stereoMode : StereoMode.OFF;
+        this.hqScaling = hqScaling;
+        this.softness = Float.isNaN(softness) ? 0f : Math.max(0f, Math.min(1f, softness));
+        this.halveLargeFrames = halveLargeFrames;
+    }
+
+    /** How many frame pixels per eye pixel the frame texture keeps at least, so halving it loses nothing visible. */
+    static final float FRAME_PIXELS_PER_EYE_PIXEL = 1.2f;
+
+    /**
+     * The size of the texture the stream's frames are prefiltered into when {@link #halveLargeFrames} is set. A
+     * stream much larger than an eye's part of the phone's screen is halved once on the way in: a 3840x2160 stream
+     * on a 1544-pixel-wide eye becomes 1920x1080, which is still more than the virtual screen can show (docs/
+     * VR-RENDERER.md has the numbers), and tone mapping, the mip chain and the eye pass's reads then work on a
+     * quarter of the pixels. One bilinear sample
+     * at the middle of each 2x2 block averages it exactly. In a 3D mode each eye gets half the frame, so the frame
+     * keeps its size.
+     *
+     * @param eyeWidthPixels the width of one eye's half of the phone's screen
+     * @return {width, height}
+     */
+    public static int[] frameTargetSize(int videoWidth, int videoHeight, int eyeWidthPixels, boolean stereo) {
+        int w = videoWidth, h = videoHeight;
+        if (!stereo && eyeWidthPixels > 0) {
+            // One halving only: a single bilinear sample can't average more than 2x2
+            if (w % 2 == 0 && h % 2 == 0 && w / 2 >= FRAME_PIXELS_PER_EYE_PIXEL * eyeWidthPixels) {
+                w /= 2;
+                h /= 2;
+            }
+        }
+        return new int[] {w, h};
+    }
+
+    /** The "Picture softness" setting, in percent, as 0 to 1. */
+    public static float softnessFromPercent(int percent) {
+        return Math.max(0, Math.min(100, percent)) / 100f;
+    }
+
+    /** The "Sharpness" setting, in percent, as an unsharp-mask strength. */
+    public static float sharpnessFromPercent(int percent) {
+        return Math.max(0, Math.min(100, percent)) / 100f;
+    }
+
+    private static final float METERS_PER_INCH = 0.0254f;
+
+    /**
+     * Width of the screen's long side in meters, for phones where it is known, or 0.
+     *
+     * <p>This is more reliable than the reported densities, which don't always follow Samsung's screen resolution
+     * setting (FHD+ or WQHD+). A wrong pixel size puts the lens centers in the wrong place.</p>
+     */
+    public static float knownScreenWidthMeters(String model) {
+        if (model == null) {
+            return 0f;
+        }
+        // Galaxy S22 Ultra (SM-S908B/E/N/U/U1/W, SM-S9080): 6.8" 3088x1440 panel, 172.6 mm diagonal.
+        if (model.startsWith("SM-S908")) {
+            return 0.1564f;
+        }
+        return 0f;
+    }
+
+    /**
+     * Physical pixel size: from the known screen width for supported phones, otherwise from the reported densities.
+     *
+     * @param screenLongSidePx the screen's long side in pixels, at the current resolution setting
+     */
+    public static float metersPerPixel(String model, int screenLongSidePx, float xdpi, float ydpi, int densityDpi) {
+        float width = knownScreenWidthMeters(model);
+        if (width > 0f && screenLongSidePx > 0) {
+            return width / screenLongSidePx;
+        }
+        return metersPerPixel(xdpi, ydpi, densityDpi);
+    }
+
+    /**
+     * Physical pixel size from the display's reported densities.
+     *
+     * <p>{@code xdpi}/{@code ydpi} are the measured values but some devices report nonsense, so they are averaged
+     * and checked against {@code densityDpi} (the rounded bucket density, which is always set). If they disagree by
+     * more than 30%, the bucket density is used: the lens centers then land a few millimeters off, which is still
+     * usable.</p>
+     */
+    public static float metersPerPixel(float xdpi, float ydpi, int densityDpi) {
+        float measured = (xdpi + ydpi) / 2f;
+        float dpi = measured;
+        if (densityDpi > 0 && (measured <= 0 || Math.abs(measured - densityDpi) / densityDpi > 0.3f)) {
+            dpi = densityDpi;
+        }
+        if (dpi <= 0) {
+            dpi = 420f; // A typical 6" 1080p+ phone.
+        }
+        return METERS_PER_INCH / dpi;
+    }
+}
