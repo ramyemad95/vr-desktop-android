@@ -128,6 +128,52 @@ public class FramePacerTest {
     }
 
     @Test
+    public void oneFrameBufferAbsorbsFramesAlmostAFrameLateAtEveryPhase() {
+        // Every 10th frame leaves the decoder 13 ms later than the others: within the 16.7 ms buffer wherever the
+        // refreshes fall (sending frames at the nearest refresh left as little as 8.3 ms)
+        for (long phase = 0; phase < FRAME_NS; phase += FRAME_NS / 16) {
+            Result r = simulate(delays(1200, 500_000L, 10, 13_000_000L), new FramePacer(1, 60), phase);
+            assertEquals("repeats at phase " + phase, 0, r.repeats);
+            assertEquals("dropped at phase " + phase, 0, r.dropped);
+        }
+    }
+
+    @Test
+    public void dueTimesOnARefreshDoNotFlipBetweenRefreshes() {
+        // Every frame is due right at a refresh, and the refreshes come up to 1.5 ms early or late
+        FramePacer pacer = new FramePacer(1, 60);
+        Result r = new Result();
+        pacer.setOutput(r);
+        r.counting = true;
+        Random random = new Random(3);
+        long delayNs = 5_000_000L;
+        int repeats = 0;
+        for (int i = 0; i < 1200; i++) {
+            pacer.onFrameDecoded(i, i * FRAME_NS / 1000, BASE_NS + i * FRAME_NS + delayNs);
+            long jitterNs = (long) ((random.nextDouble() * 2 - 1) * 1_500_000L);
+            r.shownThisRefresh = 0;
+            pacer.onRefresh(BASE_NS + i * FRAME_NS + delayNs + FRAME_NS + jitterNs, FRAME_NS);
+            if (i > 2 && r.shownThisRefresh == 0) {
+                repeats++;
+            }
+        }
+        assertEquals(0, repeats);
+        assertEquals(0, r.dropped);
+    }
+
+    @Test
+    public void aFrameIsNotSentBeforeItIsDue() {
+        FramePacer pacer = new FramePacer(1, 60);
+        Result r = new Result();
+        pacer.setOutput(r);
+        long decodedNs = BASE_NS + 5_000_000L;
+        pacer.onFrameDecoded(0, 0, decodedNs);
+        // Due one frame after it was decoded: not at a refresh 6 ms before that, but at the next one
+        assertTrue(!pacer.onRefresh(decodedNs + FRAME_NS - 6_000_000L, FRAME_NS));
+        assertTrue(pacer.onRefresh(decodedNs + 2 * FRAME_NS - 6_000_000L, FRAME_NS));
+    }
+
+    @Test
     public void framesAreShownInOrderAndEveryBufferIsReturned() {
         Result r = simulate(delays(600, 4_000_000L, 50, 40_000_000L), new FramePacer(1, 60), WORST_PHASE_NS);
         for (int i = 1; i < r.shown.size(); i++) {

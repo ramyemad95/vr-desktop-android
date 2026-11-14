@@ -719,7 +719,7 @@ public final class FrameLog {
         if (late.fate == FLUSHED) {
             return Cause.DECODER_RESET;
         }
-        if (ex[0] > bufferNs + refreshNs / 2) {
+        if (ex[0] > bufferNs) {
             Cause[] stages = {Cause.PC_ENCODE, Cause.NETWORK, Cause.TRANSFER, Cause.PHONE_QUEUE, Cause.PHONE_DECODE};
             int best = 0;
             for (int i = 1; i < stages.length; i++) {

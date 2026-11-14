@@ -19,6 +19,14 @@ import java.util.ArrayDeque;
  * screen as long as none is later than the buffer. The smallest offset follows the slow drift between the PC's and
  * the phone's clocks by itself, which costs an occasional single repeated or skipped frame.</p>
  *
+ * <p>A frame is never sent before it's due (give or take {@link #EARLY_DIVISOR}), so the whole buffer is there for
+ * a late frame wherever the screen's refreshes fall against the frames: it waits for the first refresh after its due
+ * time, between the buffer and the buffer plus one refresh after the fastest path. (Sending it at the nearest
+ * refresh instead, up to half a refresh early, left half a frame of buffer at the unlucky phase: in a 17-minute
+ * 1080p60 game stream 9% of the frames were dropped that way, against under 2% with this rule.) While one frame goes out
+ * per refresh, the next frame keeps that rhythm as long as its due time stays within a band around the refresh, so
+ * due times that sit right on a refresh don't flip between two refreshes with every bit of jitter.</p>
+ *
  * <p>The frames wait here as the decoder's output buffers, not in the VR view's {@code SurfaceTexture}: the
  * decoder's surface keeps only its newest frame, so a frame held back there would be replaced by the next one. At
  * each display refresh the VR renderer calls {@link #onRefresh}, which sends at most one frame to the surface (the
@@ -47,12 +55,20 @@ public final class FramePacer {
     static final long OFFSET_WINDOW_NS = 2_000_000_000L;
     /** The largest buffer the Smooth video setting offers, in frames. */
     public static final int MAX_BUFFER_FRAMES = 2;
-    /** Frames held beyond the buffer before the oldest are dropped, which bounds the delay and feeds the decoder. */
-    static final int MAX_EXTRA_FRAMES = 1;
+    /**
+     * Frames held beyond the buffer before the oldest are dropped, which bounds the delay and feeds the decoder. Two:
+     * a frame waits up to the buffer plus one refresh, and the next one is decoded meanwhile.
+     */
+    static final int MAX_EXTRA_FRAMES = 2;
+    /** In rhythm, a frame may go out this fraction of a refresh before it's due (the refresh timer's own jitter). */
+    static final int EARLY_DIVISOR = 8;
+    /** In rhythm, a frame may go out this fraction of a refresh past a full refresh late before frames are skipped. */
+    static final int LATE_DIVISOR = 4;
     /** A jump in PC time larger than this (or backwards) means a new time base: the offsets start over. */
     static final long PC_TIME_JUMP_NS = 1_000_000_000L;
 
     private final long bufferNs;
+    private final long frameNs;
     private final int maxHeld;
 
     /** Decoded frames waiting to be shown, oldest first: {decoder output buffer index, PC time in ns}. */
@@ -60,6 +76,9 @@ public final class FramePacer {
     /** The smallest (decode time - PC time) of the last {@link #OFFSET_WINDOW_NS}: the fastest frame lately. */
     private final WindowMin offsets = new WindowMin(OFFSET_WINDOW_NS);
     private long lastPcNs = Long.MIN_VALUE;
+    /** The last frame sent and the refresh it went out at, to tell whether the next frame continues the rhythm. */
+    private long sentPcNs = Long.MIN_VALUE;
+    private long sentRefreshNs = Long.MIN_VALUE;
     private Output output;
 
     /**
@@ -67,7 +86,7 @@ public final class FramePacer {
      * @param fps the stream's frame rate, which sets the length of a frame
      */
     public FramePacer(int bufferFrames, int fps) {
-        long frameNs = 1_000_000_000L / Math.max(fps, 1);
+        frameNs = 1_000_000_000L / Math.max(fps, 1);
         bufferNs = Math.max(bufferFrames, 0) * frameNs;
         maxHeld = Math.max(bufferFrames, 0) + MAX_EXTRA_FRAMES;
     }
@@ -105,8 +124,9 @@ public final class FramePacer {
     }
 
     /**
-     * GL thread, once per display refresh: sends the newest frame that's due to the surface (dropping older due
-     * ones) so the renderer shows it from the next refresh on.
+     * GL thread, once per display refresh: sends a frame that's due to the surface so the renderer shows it from the
+     * next refresh on. In rhythm (a frame went out at the previous refresh and the oldest held frame is the one
+     * after it) that frame goes out; otherwise the newest due frame does and older due ones are dropped.
      *
      * @param nowNs {@code System.nanoTime()} at the start of the refresh's drawing
      * @param refreshNs the length of a display refresh
@@ -116,21 +136,33 @@ public final class FramePacer {
         if (held.isEmpty() || offsets.isEmpty()) {
             return false;
         }
-        long offset = offsets.min();
-        // A frame goes out at the refresh nearest the time it's due
-        long deadline = nowNs + refreshNs / 2;
-        long[] newestDue = null;
-        while (!held.isEmpty() && held.peekFirst()[1] + offset + bufferNs <= deadline) {
-            if (newestDue != null) {
-                drop(newestDue, false);
-            }
-            newestDue = held.pollFirst();
+        long delay = offsets.min() + bufferNs;
+        long[] oldest = held.peekFirst();
+        long[] send = null;
+        // How long ago the oldest frame was due
+        long overdueNs = nowNs - (oldest[1] + delay);
+        boolean inRhythm = sentRefreshNs != Long.MIN_VALUE
+                && Math.abs(nowNs - sentRefreshNs - refreshNs) < refreshNs / 2
+                && Math.abs(oldest[1] - sentPcNs - frameNs) < frameNs / 2;
+        if (inRhythm && overdueNs >= -refreshNs / EARLY_DIVISOR && overdueNs < refreshNs + refreshNs / LATE_DIVISOR) {
+            send = held.pollFirst();
         }
-        if (newestDue == null) {
+        else {
+            // A frame goes out at the first refresh after it's due
+            while (!held.isEmpty() && held.peekFirst()[1] + delay <= nowNs) {
+                if (send != null) {
+                    drop(send, false);
+                }
+                send = held.pollFirst();
+            }
+        }
+        if (send == null) {
             return false;
         }
+        sentPcNs = send[1];
+        sentRefreshNs = nowNs;
         if (output != null) {
-            output.show((int) newestDue[0]);
+            output.show((int) send[0]);
         }
         return true;
     }
@@ -140,6 +172,8 @@ public final class FramePacer {
         held.clear();
         offsets.clear();
         lastPcNs = Long.MIN_VALUE;
+        sentPcNs = Long.MIN_VALUE;
+        sentRefreshNs = Long.MIN_VALUE;
     }
 
     private void drop(long[] frame, boolean overflow) {
