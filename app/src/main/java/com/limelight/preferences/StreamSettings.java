@@ -9,6 +9,8 @@ import android.media.MediaCodecInfo;
 import android.os.Build;
 import android.os.Bundle;
 import android.app.Activity;
+import android.app.AlertDialog;
+import android.content.DialogInterface;
 import android.os.Handler;
 import android.os.Vibrator;
 import android.preference.CheckBoxPreference;
@@ -122,6 +124,8 @@ public class StreamSettings extends Activity {
     }
 
     public static class SettingsFragment extends PreferenceFragment {
+        private static final String VR_CATEGORY_KEY = "category_vr_settings";
+        private static final String RESET_VR_SETTINGS_KEY = "reset_vr_settings";
         private int nativeResolutionStartIndex = Integer.MAX_VALUE;
         private boolean nativeFramerateShown = false;
 
@@ -247,6 +251,27 @@ public class StreamSettings extends Activity {
             // Update the preference with the new list
             pref.setEntries(entries);
             pref.setEntryValues(entryValues);
+        }
+
+        /**
+         * Forgets the stored value of every setting in the VR section, so each one is back at its default from
+         * res/values/vr_defaults.xml, and redraws the screen.
+         */
+        private void resetVrSettings() {
+            PreferenceCategory vr = (PreferenceCategory) findPreference(VR_CATEGORY_KEY);
+            SharedPreferences.Editor editor = PreferenceManager.getDefaultSharedPreferences(getActivity()).edit();
+            for (int i = 0; i < vr.getPreferenceCount(); i++) {
+                String key = vr.getPreference(i).getKey();
+                if (key != null) {
+                    editor.remove(key);
+                }
+            }
+            editor.apply();
+
+            StreamSettings settingsActivity = (StreamSettings) getActivity();
+            if (settingsActivity != null) {
+                settingsActivity.reloadSettings();
+            }
         }
 
         private void resetBitrateToDefault(SharedPreferences prefs, String res, String fps) {
@@ -547,6 +572,23 @@ public class StreamSettings extends Activity {
                 // Never remove 30 FPS or 60 FPS
             }
             addNativeFrameRateEntry(maxSupportedFps);
+
+            findPreference(RESET_VR_SETTINGS_KEY).setOnPreferenceClickListener(new Preference.OnPreferenceClickListener() {
+                @Override
+                public boolean onPreferenceClick(Preference preference) {
+                    new AlertDialog.Builder(getActivity())
+                            .setMessage(R.string.message_reset_vr_settings)
+                            .setNegativeButton(android.R.string.cancel, null)
+                            .setPositiveButton(android.R.string.ok, new DialogInterface.OnClickListener() {
+                                @Override
+                                public void onClick(DialogInterface dialog, int which) {
+                                    resetVrSettings();
+                                }
+                            })
+                            .show();
+                    return true;
+                }
+            });
 
             // Android L introduces the drop duplicate behavior of releaseOutputBuffer()
             // that the unlock FPS option relies on to not massively increase latency.

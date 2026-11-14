@@ -32,20 +32,21 @@ public final class ViewerProfile {
     /** Side-by-side without lens correction, for viewers whose lenses barely distort or for checking the image without a viewer. */
     public static final ViewerProfile NO_LENS = new ViewerProfile(0.064f, 0.039f, 0f, 0f, 60f);
     /**
-     * cardoO VR Go (model CEGVRH04), from cardoo.co/vr-specs: 40 mm aspherical resin lenses, 90-100° field of view,
-     * IPD dial 60-70 mm, focus dial 37.5-46.5 mm screen to lens.
+     * cardoO VR Go (model CEGVRH04), from cardoo.co/vr-specs: 40 mm aspherical resin lenses, 90-100° field of view.
+     * Measured on the viewer with a ruler: the IPD dial moves the lenses' edges from 23 to 37 mm apart, so their
+     * centers from 63 to 77 mm; the focus dial moves them from 40 to 50 mm from the phone.
      *
      * <ul>
      *   <li>Lens distance 64 mm: the IPD dial is turned until the two eyes' images merge, which puts the lenses where
      *   the app draws them.</li>
-     *   <li>Screen to lens 42 mm: the middle of the focus dial's range.</li>
+     *   <li>Screen to lens 45 mm: the middle of the focus dial's range.</li>
      *   <li>Half FOV 50°: from the 90-100° field of view.</li>
      *   <li>k1, k2: cardoO doesn't publish them. The lens is the same class as Cardboard v2's (large aspherical
      *   magnifier, about 100° field of view), so it uses those. Inside a 70° virtual screen, Cardboard v1's and v2's
      *   coefficients differ by about 1% at the screen's edge.</li>
      * </ul>
      */
-    public static final ViewerProfile CARDOO_VR_GO = new ViewerProfile(0.064f, 0.042f, 0.34f, 0.55f, 50f);
+    public static final ViewerProfile CARDOO_VR_GO = new ViewerProfile(0.064f, 0.045f, 0.34f, 0.55f, 50f);
 
     /**
      * The same viewer with its lenses {@code meters} apart, for viewers with an IPD dial. The app draws each eye's

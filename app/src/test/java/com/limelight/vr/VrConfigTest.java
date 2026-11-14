@@ -30,7 +30,7 @@ public class VrConfigTest {
         assertEquals(ViewerProfile.CARDOO_VR_GO.k1, far.k1, EPS);
         assertEquals(ViewerProfile.CARDOO_VR_GO.halfFovDegrees, far.halfFovDegrees, EPS);
         assertSame(ViewerProfile.CARDOO_VR_GO, ViewerProfile.fromPreferences("cardoo_vr_go", 0, 0f));
-        // Half-millimeter steps, e.g. the cardoO's focus dial with the lenses closest to the phone
+        // Half-millimeter steps
         assertEquals(0.0375f, ViewerProfile.fromPreferences("none", 60, 37.5f).screenToLensDistance, 1e-7f);
     }
 

@@ -17,12 +17,15 @@
     <!-- Percent; 0 is off -->
     <integer name="default_seekbar_vr_sharpness">30</integer>
     <bool name="default_checkbox_vr_recenter_vertical">true</bool>
-    <!-- mm; "0" is the viewer's own -->
+    <!-- mm; "0" is the viewer's own. Picked by eye in the headset. It is not the distance between the lenses: on a cardoO VR Go
+         with its IPD dial at its widest (lens centers 77 mm apart, measured), 77 gave a double picture and 50 a
+         single one (12 Nov 2026) -->
     <string name="default_list_vr_lens_distance" translatable="false">50</string>
-    <!-- mm; "0" is the viewer's own -->
-    <string name="default_list_vr_screen_distance" translatable="false">60</string>
+    <!-- mm; "0" is the viewer's own. The cardoO VR Go's focus dial at its farthest (40 to 50 mm, measured), where it is used -->
+    <string name="default_list_vr_screen_distance" translatable="false">50</string>
     <bool name="default_checkbox_vr_match_pc_resolution">true</bool>
-    <bool name="default_checkbox_vr_fc27_mode">true</bool>
+    <!-- Off, so the stream follows the PC's resolution: nothing is shown below what the PC displays -->
+    <bool name="default_checkbox_vr_fc27_mode">false</bool>
     <!-- sRGB, or "native" (Display P3) -->
     <string name="default_list_vr_color_space" translatable="false">auto</string>
     <!-- Frames of buffer; 0 is off -->

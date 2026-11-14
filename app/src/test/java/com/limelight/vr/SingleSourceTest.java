@@ -84,6 +84,24 @@ public class SingleSourceTest {
         }
     }
 
+    /** "Reset VR settings to recommended" forgets the stored values, so every VR setting needs a default to fall back to. */
+    @Test
+    public void everyVrSettingHasADefaultToResetTo() throws IOException {
+        String vr = find(read("src/main/res/xml/preferences.xml"), "android:key=\"category_vr_settings\">(.*?)</PreferenceCategory>");
+        Matcher m = Pattern.compile("<[\\w.]*Preference\\b(.*?)/>", Pattern.DOTALL).matcher(vr);
+        int settings = 0;
+        while (m.find()) {
+            String key = find(m.group(1), "android:key=\"(\\w+)\"");
+            if (key.equals("reset_vr_settings")) {
+                continue;
+            }
+            assertTrue(key + " has no default", m.group(1).contains("android:defaultValue=\"@"));
+            assertNotNull(vrDefault("default_" + key));
+            settings++;
+        }
+        assertTrue(settings >= 28);
+    }
+
     @Test
     public void smoothVideoChoicesFitThePacer() throws IOException {
         int max = 0;

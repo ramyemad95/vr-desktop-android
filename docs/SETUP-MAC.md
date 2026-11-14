@@ -61,16 +61,16 @@ The Windows PC runs Sunshine, set up by the VR Desktop Host app from
 - Put the phone in the viewer and tap the screen (or press the viewer's button) to bring the virtual screen in front
   of you. Do this again any time it drifts.
 - In the phone's VR Desktop **Settings → VR Settings**. The defaults are the settings tuned on a Galaxy S22 Ultra
-  in a Cardboard v2-type viewer for EA SPORTS FC 27 (FC 27 mode, 60 Hz, 60° screen, Sharpness 30%, Picture softness
-  80%, lens distance 50 mm, screen to lens distance 60 mm, Smooth video 1 frame, Color space Auto, and in the main
+  in a Cardboard v2-type viewer (Resolution: match the PC, 60 Hz, 60° screen, Sharpness 30%, Picture softness
+  80%, lens distance 50 mm (picked by eye), screen to lens distance 50 mm (the cardoO VR Go's focus dial at its farthest), Smooth video 1 frame, Color space Auto, and in the main
   settings 4K, H.265 and Enable HDR; the VR ones are all in `app/src/main/res/values/vr_defaults.xml`); change them
   to match your viewer and use.
-  - **Resolution: match the PC:** on, but greyed out while FC 27 mode is on. With the VR Desktop Host app running on the PC, the stream uses
+  - **Resolution: match the PC:** on by default (greyed out while FC 27 mode is on). With the VR Desktop Host app running on the PC, the stream uses
     the PC screen's current resolution: a fullscreen game at 1080p streams at 1080p (about 50 Mbps), the desktop
     at 4K (about 100 Mbps). When a game switches resolution and stays there for 3 seconds, the stream reconnects
     at the new one, with a second or two of black. Borderless games keep the desktop's resolution. Without the host
     app, the Resolution and Bitrate settings apply.
-  - **FC 27 mode:** on by default. Streams at 1920×1080 with HDR (about 50 Mbps at 60 FPS) from the start, the
+  - **FC 27 mode:** off by default. When on, it streams at 1920×1080 with HDR (about 50 Mbps at 60 FPS) from the start, the
     way EA SPORTS FC 27 runs fullscreen, and doesn't follow the PC's resolution, so starting or leaving the game
     doesn't reconnect the stream (the 4K desktop is shown at 1080p meanwhile). It overrides Resolution, Bitrate and
     Enable HDR, and turns off "Resolution: match the PC". It doesn't change what the PC lets Sunshine capture: if
@@ -84,12 +84,12 @@ The Windows PC runs Sunshine, set up by the VR Desktop Host app from
     center the phone on the line between the eyes, turn the IPD dial until the image is single, then the focus
     dial until text is sharp.
   - **Lens distance (IPD):** for viewers with an IPD dial. If your eyes need the lenses closer or wider than
-    64 mm, set the dial there and the same distance here, or the two images won't merge. cardoO VR Go: 60 mm with
-    the lenses at their closest, 70 mm at their widest; try ±1 mm around that until the image is single and sharp.
+    64 mm, set the dial there and the same distance here, or the two images won't merge. cardoO VR Go: 63 mm with
+    the lenses at their closest, 77 mm at their widest (the gap between the lenses plus 40 mm); try ±1 mm around that until the image is single and sharp.
   - **Screen to lens distance (focus):** for viewers with a focus dial. Turn the dial until text is sharp (only
     the dial fixes blur), then pick the value here at which the screen stays still when you turn your head: if
-    it drifts the way you turn, pick a bigger number; the other way, a smaller one. cardoO VR Go: about 37.5 mm
-    with the lenses closest to the phone, 46.5 mm farthest. Judge it on the middle of the screen: with "No lens
+    it drifts the way you turn, pick a bigger number; the other way, a smaller one. cardoO VR Go: about 40 mm
+    with the lenses closest to the phone, 50 mm farthest. Judge it on the middle of the screen: with "No lens
     correction" the edges always drift a little, because the lens distorts more there.
   - **Ultimate High Quality:** off by default. Puts picture quality ahead of speed and battery: it turns on
     High-quality scaling and Anti screen-door and keeps 4K frames at full size, whatever those three switches say.
@@ -150,6 +150,9 @@ The Windows PC runs Sunshine, set up by the VR Desktop Host app from
   - **Frame timing log:** on by default. Records how every frame gets from the PC to the screen, and why any
     stutters, to a file on the phone (the last 15 streams). `scripts/pull-frame-logs.sh` on the Mac copies them and
     prints a report: see [FRAME-LOG.md](FRAME-LOG.md).
+  - **Reset VR settings to recommended:** the last item in the VR section. Puts every setting in the section back
+    to its default (the values in `app/src/main/res/values/vr_defaults.xml`) after asking; settings outside the
+    section, such as Resolution and Bitrate, are left alone.
   - **VR mode:** turn it off to check the stream as a normal flat Moonlight stream.
 - **HDR games:** Settings → Advanced → **Enable HDR** is on by default. The PC then sends HDR when Windows is in
   HDR, and the VR view converts it to the phone's SDR picture with the right colors (the stats panel shows `HDR`). With HDR
@@ -160,8 +163,8 @@ The Windows PC runs Sunshine, set up by the VR Desktop Host app from
   SuperDepth3D shader, set to side by side, turns the game's depth into a 3D picture; some games have true 3D mods
   (Geo-11). Check that each eye sees one whole picture, that there's depth, and that there's no thin line at the
   screen's inner edges. With the stats panel on, the video line shows `3D SBS` or `3D TB`.
-- Stream settings: with FC 27 mode (the default) the stream is 1080p HDR at 60 FPS and 50 Mbps; with it off, the
-  PC screen's own resolution (1080p about 50, 1440p about 80, 4K about 100 Mbps). 150% scaling in Windows keeps
+- Stream settings: by default the stream has the PC screen's own resolution (1080p about 50, 1440p about 80, 4K
+  about 100 Mbps); with FC 27 mode on it is 1080p HDR at 60 FPS and 50 Mbps. 150% scaling in Windows keeps
   text large enough to read.
 
 ## What to report back after the first test

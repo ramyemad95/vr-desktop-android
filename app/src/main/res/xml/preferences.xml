@@ -211,6 +211,10 @@
             android:title="@string/title_checkbox_frame_log"
             android:summary="@string/summary_checkbox_frame_log"
             android:defaultValue="@bool/default_checkbox_frame_log" />
+        <Preference
+            android:key="reset_vr_settings"
+            android:title="@string/title_reset_vr_settings"
+            android:summary="@string/summary_reset_vr_settings" />
     </PreferenceCategory>
     <PreferenceCategory android:title="@string/category_basic_settings"
         android:key="category_basic_settings">

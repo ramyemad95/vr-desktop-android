@@ -31,7 +31,7 @@ adds:
   level and highlight compression, Color and Contrast, to tune the picture toward a TV's.
 - **Color space (HDR)**: "Native" shows HDR colors in the phone screen's full color range, like a TV's Native color
   space; "Auto" converts them to sRGB.
-- **FC 27 mode**: a fixed 1080p HDR stream from the start, for EA SPORTS FC 27, with no reconnects when the game
+- **FC 27 mode** (off by default): a fixed 1080p HDR stream from the start, for EA SPORTS FC 27, with no reconnects when the game
   starts or ends.
 - **Frame timing log**: every frame's way from the PC's capture to the phone's screen, with a cause named for each
   stutter (the PC, the network, the phone's decoder or its drawing), the phone's temperatures and, with the host

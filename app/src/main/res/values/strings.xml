@@ -358,10 +358,10 @@
     <string name="vr_viewer_cardoo_vr_go">cardoO VR Go (turn its IPD dial until the image is single)</string>
     <string name="vr_viewer_none">No lens correction</string>
     <string name="title_list_vr_lens_distance">Lens distance (IPD)</string>
-    <string name="summary_list_vr_lens_distance">For viewers with an IPD dial: set the distance between the lenses. If the image doubles or won\'t come into focus after you turn the dial, the app\'s lens distance doesn\'t match it. cardoO VR Go: 60 mm with the lenses at their closest, 70 mm at their widest.</string>
+    <string name="summary_list_vr_lens_distance">For viewers with an IPD dial: set the distance between the lenses. If the image doubles or won\'t come into focus after you turn the dial, the app\'s lens distance doesn\'t match it. cardoO VR Go: 63 mm with the lenses at their closest, 77 mm at their widest.</string>
     <string name="vr_lens_distance_default">The viewer\'s own</string>
     <string name="title_list_vr_screen_distance">Screen to lens distance (focus)</string>
-    <string name="summary_list_vr_screen_distance">For viewers with a focus dial. Turn the dial until text is sharp, then pick the value here at which the screen stays still when you turn your head: if it drifts the way you turn, pick a bigger number; if it drifts the other way, a smaller one. Judge it on the middle of the screen. cardoO VR Go: about 37.5 mm with the lenses closest to the phone, 46.5 mm farthest.</string>
+    <string name="summary_list_vr_screen_distance">For viewers with a focus dial. Turn the dial until text is sharp, then pick the value here at which the screen stays still when you turn your head: if it drifts the way you turn, pick a bigger number; if it drifts the other way, a smaller one. Judge it on the middle of the screen. cardoO VR Go: about 40 mm with the lenses closest to the phone, 50 mm farthest.</string>
     <string name="title_seekbar_vr_screen_size">Virtual screen size</string>
     <string name="summary_seekbar_vr_screen_size">How wide the PC screen looks, in degrees of your view. Bigger makes text easier to read; smaller fits the whole screen in view.</string>
     <string name="suffix_seekbar_vr_screen_size">°</string>
@@ -397,6 +397,9 @@
     <string name="vr_refresh_rate_96">96 Hz</string>
     <string name="vr_refresh_rate_60">60 Hz</string>
     <string name="title_checkbox_vr_stats_panel">Stats panel</string>
+    <string name="title_reset_vr_settings">Reset VR settings to recommended</string>
+    <string name="summary_reset_vr_settings">Puts every setting in this section back to its recommended value. Settings outside this section, such as Resolution and Bitrate, are left alone.</string>
+    <string name="message_reset_vr_settings">Put every VR setting back to its recommended value?</string>
     <string name="title_checkbox_frame_log">Frame timing log</string>
     <string name="summary_checkbox_frame_log">Records how each frame gets from the PC to the screen, and why any stutters, to a file on the phone (about 5–10 MB an hour; the last 15 streams are kept). For finding stutter; see docs/FRAME-LOG.md.</string>
     <string name="summary_checkbox_vr_stats_panel">Show a panel below the virtual screen with the network status (green OK, yellow unstable, red poor), the PC\'s encode time and the phone\'s decode time. Look down to read it.</string>

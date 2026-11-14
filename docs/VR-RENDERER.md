@@ -119,22 +119,24 @@ barrel-shaped. Presets:
 |---|---|---|---|---|
 | Cardboard v2 / most plastic viewers (default) | 64 mm | 39 mm | 0.34, 0.55 | 60° |
 | Cardboard v1 | 60 mm | 42 mm | 0.441, 0.156 | 40° |
-| cardoO VR Go | 64 mm | 42 mm | 0.34, 0.55 | 50° |
+| cardoO VR Go | 64 mm | 45 mm | 0.34, 0.55 | 50° |
 | No lens correction | 64 mm | 39 mm | 0, 0 | 60° |
 
 These are the viewers' own values. The app's defaults then override two of them for every viewer: Lens distance
-50 mm and Screen to lens distance 60 mm (`res/values/vr_defaults.xml`); "The viewer's own" in either setting
+50 mm, picked by eye, and Screen to lens distance 50 mm, the cardoO VR Go's focus dial at its farthest
+(`res/values/vr_defaults.xml`); "The viewer's own" in either setting
 brings the table's value back.
 
 **cardoO VR Go** ([specs](https://cardoo.co/vr-specs)): 40 mm aspherical lenses, 90–100° field of view, an IPD dial
-(60–70 mm) and a focus dial (37.5–46.5 mm screen to lens). The preset uses 64 mm (the user turns the IPD dial until
+and a focus dial. Measured on the viewer with a ruler: the lenses' edges are 23 to 37 mm apart, so their centers 63 to
+77 mm, and the lenses sit 40 to 50 mm from the phone. The preset uses 64 mm (the user turns the IPD dial until
 the two images merge, which brings the lenses to where the app draws them), the middle of the focus range, and a
 half FOV from the stated field of view. cardoO doesn't publish distortion coefficients; the lens is the same class as
 Cardboard v2's, so it uses those (inside a 70° screen, v1's and v2's coefficients differ by about 1% at the edge).
 
-**Lens distance (IPD) setting:** overrides any preset's lens distance (50–75 mm), for viewers with an IPD dial
+**Lens distance (IPD) setting:** overrides any preset's lens distance (50–77 mm), for viewers with an IPD dial
 whose user needs it away from 64 mm. Each eye's image is centered on its lens, so a mismatch of 2 mm per eye
-(the cardoO's dial at its 60 mm minimum against the presets' 64 mm) would need the eyes to turn about 3° outward
+(a dial at 60 mm against the presets' 64 mm) would need the eyes to turn about 3° outward
 each to merge the images, which they can't: the picture doubles and looks out of focus. The setting also sets the
 distance between the virtual eyes.
 
@@ -180,7 +182,7 @@ can be read from a viewer's Cardboard QR profile and added as a new preset later
   new resolution has held for 3 s and isn't the stream's own (a match → menu → match cycle doesn't reconnect).
   The restart stops the connection, finishes `Game` and starts it again with the same intent; moonlight-common
   holds the new connection until the old one has stopped, and Sunshine resumes the session at the new size.
-- **FC 27 mode** (`PreferenceConfiguration.vrFc27Mode`): a fixed 1920×1080 HDR stream, with the bitrate from the
+- **FC 27 mode** (`PreferenceConfiguration.vrFc27Mode`, off by default): a fixed 1920×1080 HDR stream, with the bitrate from the
   same table, read with the other preferences. It turns off "Resolution: match the PC", so `Game` neither asks the
   host for the display mode nor follows it.
 
@@ -201,8 +203,8 @@ can be read from a viewer's Cardboard QR profile and added as a new preset later
   samplers of different types share a unit.
 - **App category:** the app is marked as a productivity app, not a game, so Samsung's Game Booster/GOS doesn't
   throttle it or lower its resolution.
-- **Streaming:** HEVC at 60 fps. With the defaults (FC 27 mode), 1920×1080 HDR at 50 Mbps; with FC 27 mode off,
-  the PC display's own resolution, with the bitrate from the table under "Resolution: match the PC" above. How
+- **Streaming:** HEVC at 60 fps. With the defaults, the PC display's own resolution, with the bitrate from the
+  table under "Resolution: match the PC" above; with FC 27 mode on, 1920×1080 HDR at 50 Mbps. How
   much of the stream's detail reaches the eye is under "How many phone pixels the screen covers" below. On the PC,
   150% Windows scaling keeps text large enough to read.
 - **Viewer:** the S22 Ultra is a 6.8" phone (163 × 78 mm), so check that your viewer takes phones that size.
@@ -216,11 +218,12 @@ screen-to-lens distance / pixel size`. On the S22 Ultra at WQHD+ (each eye 1544 
 | Screen to lens distance | 60° screen | 75° screen | 90° screen |
 |---|---|---|---|
 | 39 mm (Cardboard v2's own) | 789 px | 968 px | 1,140 px |
-| 60 mm (the setting's default) | 1,214 px | 1,490 px | 1,753 px |
+| 50 mm (the setting's default) | 1,011 px | 1,241 px | 1,461 px |
+| 60 mm (the default until 12 Nov 2026) | 1,214 px | 1,490 px | 1,753 px |
 
-So a 1080p stream has 1.6 pixels per screen pixel on the default 60° screen (2.4 at 39 mm) and a 4K stream 3.2
-(4.9 at 39 mm). Screenshots on 12 Nov 2026 measured about 790 at 60° and 970 at 75°: the phone's Screen to lens
-distance was at the viewer's own 39 mm then, not at the default.
+So a 1080p stream has 1.9 pixels per screen pixel on the default 60° screen (2.4 at 39 mm, 1.6 at 60 mm) and a 4K
+stream 3.8 (4.9 at 39 mm, 3.2 at 60 mm). Screenshots on 12 Nov 2026 measured about 790 at 60° and 970 at 75°: the phone's Screen to lens
+distance was at the viewer's own 39 mm then.
 
 ## Picture softness, Halve 4K frames, Ultimate High Quality (12 Nov 2026)
 

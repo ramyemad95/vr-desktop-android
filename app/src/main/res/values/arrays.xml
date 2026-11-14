@@ -160,6 +160,8 @@
         <item>73 mm</item>
         <item>74 mm</item>
         <item>75 mm</item>
+        <item>76 mm</item>
+        <item>77 mm</item>
     </string-array>
     <string-array name="vr_lens_distance_values" translatable="false">
         <item>0</item>
@@ -189,6 +191,8 @@
         <item>73</item>
         <item>74</item>
         <item>75</item>
+        <item>76</item>
+        <item>77</item>
     </string-array>
     <string-array name="vr_screen_distance_names">
         <item>@string/vr_lens_distance_default</item>
